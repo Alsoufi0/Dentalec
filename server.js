@@ -1,133 +1,190 @@
-// DentaLect Pro Backend Server
-// Uses Node.js, Express, and Firebase Firestore for data persistence.
-
-// 1. Import necessary libraries
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// --- Firebase Initialization (Now more secure and robust) ---
-let serviceAccount;
+const app = express();
+const PORT = process.env.PORT || 3001; // Use a different port like 3001 for local dev if needed
 
-// Check for a Base64 encoded service account key in environment variables (for production on Render)
-if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-    try {
-        // Decode the Base64 string into a JSON string
-        const decodedJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf-8');
-        // Parse the JSON string into an object
-        serviceAccount = JSON.parse(decodedJson);
-    } catch (error) {
-        console.error("Error parsing Base64 encoded service account key:", error);
-        process.exit(1);
+// --- Security and CORS Configuration ---
+// This tells your backend which frontend URLs are allowed to access it.
+const allowedOrigins = [
+    'http://localhost:5500', // For local testing with Live Server
+    'http://127.0.0.1:5500', // For local testing
+    'https://app.netlify.com/projects/coruscating-cheesecake-9bbb2f/overview'
+    // IMPORTANT: Add your Netlify deployment URL here after you deploy the new frontend.
+    // e.g., 'https://your-dentalect-app.netlify.app' 
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.warn(`CORS blocked for origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
     }
-} else {
-    // Fallback to the local file for local development
-    try {
+};
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' })); // Increased limit for PDF content
+
+// --- Firebase Admin SDK Initialization ---
+let db;
+try {
+    let serviceAccount;
+    // Render/Vercel use environment variables for security. This is the primary method.
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+        console.log('Initializing Firebase from Base64 environment variable...');
+        const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+        const serviceAccountJson = Buffer.from(serviceAccountBase64, 'base64').toString('utf8');
+        serviceAccount = JSON.parse(serviceAccountJson);
+    } else {
+        // Fallback for local development
+        console.log('Initializing Firebase from local serviceAccountKey.json file...');
         serviceAccount = require('./serviceAccountKey.json');
-    } catch (error) {
-        console.error("!!! IMPORTANT !!!");
-        console.error("Could not find 'serviceAccountKey.json' for local development.");
-        console.error("OR the FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable is not set for production.");
-        console.error("Please follow the setup instructions in the backend-guide.md");
-        process.exit(1); // Exit if no credentials can be found
     }
+
+    if (!admin.apps.length) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+    }
+
+    db = admin.firestore();
+    console.log("Firebase Admin SDK initialized successfully.");
+} catch (error) {
+    console.error("CRITICAL: Firebase Admin SDK Initialization Error:", error.message);
+    process.exit(1);
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+const subjectsCollection = db.collection('subjects');
 
-const db = admin.firestore();
-// --- End of Initialization ---
+// --- API Endpoints ---
 
-// 3. Initialize Express App
-const app = express();
-const port = process.env.PORT || 3000;
-
-// 4. Middleware
-app.use(cors()); // Enable Cross-Origin Resource Sharing for your frontend
-app.use(express.json()); // Allow the server to parse JSON in request bodies
-
-// --- DUMMY USER ID ---
-// In a real app, you would get this from an authentication token (e.g., JWT)
-// For now, we'll use a static ID to simulate a single user.
-const DUMMY_USER_ID = 'test-user-12345';
-
-// 5. API ROUTES (The functions for your 5 modes and data)
-
-// GET all subjects for the user
+// GET all subjects
 app.get('/api/subjects', async (req, res) => {
-  try {
-    const subjectsCollection = db.collection('users').doc(DUMMY_USER_ID).collection('subjects');
-    const snapshot = await subjectsCollection.get();
-    
-    if (snapshot.empty) {
-      // If no subjects, return the initial sample data
-      const initialSubjects = [ { id: 1, name: "Anatomy", files: [ { name: "Cranial Nerves.txt", content: "The twelve cranial nerves..." }, { name: "Muscles of Mastication.txt", content: "The four primary muscles..." } ] } ];
-      // Also save this to the database for next time
-      for (const subject of initialSubjects) {
-          await subjectsCollection.doc(String(subject.id)).set(subject);
-      }
-      return res.status(200).json(initialSubjects);
-    }
-
-    const subjects = snapshot.docs.map(doc => doc.data());
-    res.status(200).json(subjects);
-  } catch (error) {
-    console.error("Error fetching subjects:", error);
-    res.status(500).send("Error fetching data from server.");
-  }
-});
-
-// POST a new subject
-app.post('/api/subjects', async (req, res) => {
-  try {
-    const newSubject = req.body;
-    if (!newSubject || !newSubject.name || !newSubject.id) {
-      return res.status(400).send('Invalid subject data.');
-    }
-    // Save the new subject using its ID as the document name
-    await db.collection('users').doc(DUMMY_USER_ID).collection('subjects').doc(String(newSubject.id)).set(newSubject);
-    res.status(201).json(newSubject);
-  } catch (error) {
-    console.error("Error creating subject:", error);
-    res.status(500).send("Error saving data.");
-  }
-});
-
-// PUT (update) an existing subject (e.g., rename, add file)
-app.put('/api/subjects/:subjectId', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] GET /api/subjects - Fetching all subjects...`);
     try {
-        const { subjectId } = req.params;
-        const updatedSubject = req.body;
+        const snapshot = await subjectsCollection.get();
+        const subjects = snapshot.docs.map(doc => doc.data());
+        res.status(200).json(subjects);
+    } catch (error) {
+        console.error("Error fetching subjects:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
 
-        if (!updatedSubject) {
-            return res.status(400).send('Invalid update data.');
+// CREATE a new subject
+app.post('/api/subjects', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] POST /api/subjects - Received request.`);
+    console.log("Request Body:", req.body);
+    try {
+        const { name } = req.body;
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+            return res.status(400).json({ message: 'Subject name is required.' });
         }
 
-        await db.collection('users').doc(DUMMY_USER_ID).collection('subjects').doc(subjectId).set(updatedSubject);
-        res.status(200).json(updatedSubject);
+        const newSubjectRef = subjectsCollection.doc();
+        const newSubject = {
+            id: newSubjectRef.id,
+            name: name.trim(),
+            files: []
+        };
+
+        await newSubjectRef.set(newSubject);
+        console.log("Successfully created subject with ID:", newSubject.id);
+        res.status(201).json(newSubject);
+    } catch (error) {
+        console.error("Error creating subject:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+// UPDATE a subject (Rename)
+app.put('/api/subjects/:subjectId', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] PUT /api/subjects/${req.params.subjectId}`);
+    try {
+        const { subjectId } = req.params;
+        const { name } = req.body;
+        if (!name) { return res.status(400).json({ message: 'New name is required.' }); }
+        
+        await subjectsCollection.doc(subjectId).update({ name });
+        console.log("Successfully updated subject:", subjectId);
+        res.status(200).json({ message: 'Subject updated successfully' });
     } catch (error) {
         console.error("Error updating subject:", error);
-        res.status(500).send("Error updating data.");
+        res.status(500).json({ message: 'Internal Server Error' });
     }
 });
 
 // DELETE a subject
 app.delete('/api/subjects/:subjectId', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] DELETE /api/subjects/${req.params.subjectId}`);
     try {
         const { subjectId } = req.params;
-        await db.collection('users').doc(DUMMY_USER_ID).collection('subjects').doc(subjectId).delete();
-        res.status(204).send(); // 204 No Content for successful deletion
+        await subjectsCollection.doc(subjectId).delete();
+        console.log("Successfully deleted subject:", subjectId);
+        res.status(200).json({ message: 'Subject deleted successfully' });
     } catch (error) {
         console.error("Error deleting subject:", error);
-        res.status(500).send("Error deleting data.");
+        res.status(500).json({ message: 'Internal Server Error' });
     }
 });
 
+// CREATE a new file within a subject
+app.post('/api/subjects/:subjectId/files', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] POST /api/subjects/${req.params.subjectId}/files`);
+    try {
+        const { subjectId } = req.params;
+        const { name, content } = req.body;
 
-// 6. Start the server
-app.listen(port, () => {
-  console.log(`DentaLect Pro backend listening at http://localhost:${port}`);
+        if (!name || !content) { return res.status(400).json({ message: 'File name and content are required.' }); }
+
+        const subjectRef = subjectsCollection.doc(subjectId);
+        const subjectDoc = await subjectRef.get();
+        if (!subjectDoc.exists) { return res.status(404).json({ message: 'Subject not found.' }); }
+
+        const newFile = {
+            id: admin.firestore.Timestamp.now().toMillis().toString() + Math.random().toString(36).substr(2, 9),
+            name,
+            content
+        };
+
+        await subjectRef.update({ files: admin.firestore.FieldValue.arrayUnion(newFile) });
+        console.log(`Successfully added file "${name}" to subject:`, subjectId);
+        res.status(201).json(newFile);
+    } catch (error) {
+        console.error("Error adding file:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+// DELETE a file from a subject
+app.delete('/api/subjects/:subjectId/files/:fileId', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] DELETE /api/subjects/${req.params.subjectId}/files/${req.params.fileId}`);
+    try {
+        const { subjectId, fileId } = req.params;
+        const subjectRef = subjectsCollection.doc(subjectId);
+        const subjectDoc = await subjectRef.get();
+
+        if (!subjectDoc.exists) { return res.status(404).json({ message: 'Subject not found.' }); }
+
+        const subjectData = subjectDoc.data();
+        const fileToRemove = subjectData.files.find(f => f.id === fileId);
+        
+        if (!fileToRemove) { return res.status(404).json({ message: 'File not found.' }); }
+
+        await subjectRef.update({ files: admin.firestore.FieldValue.arrayRemove(fileToRemove) });
+        console.log(`Successfully removed file "${fileToRemove.name}" from subject:`, subjectId);
+        res.status(200).json({ message: 'File deleted successfully' });
+    } catch (error) {
+        console.error("Error deleting file:", error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
 
