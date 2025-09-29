@@ -6,13 +6,20 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// --- Firebase Initialization (Now more secure) ---
+// --- Firebase Initialization (Now more secure and robust) ---
 let serviceAccount;
 
-// Check if the service account key is in an environment variable (for production on Render)
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    // Parse the JSON string from the environment variable
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// Check for a Base64 encoded service account key in environment variables (for production on Render)
+if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    try {
+        // Decode the Base64 string into a JSON string
+        const decodedJson = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf-8');
+        // Parse the JSON string into an object
+        serviceAccount = JSON.parse(decodedJson);
+    } catch (error) {
+        console.error("Error parsing Base64 encoded service account key:", error);
+        process.exit(1);
+    }
 } else {
     // Fallback to the local file for local development
     try {
@@ -20,7 +27,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     } catch (error) {
         console.error("!!! IMPORTANT !!!");
         console.error("Could not find 'serviceAccountKey.json' for local development.");
-        console.error("OR the FIREBASE_SERVICE_ACCOUNT environment variable is not set for production.");
+        console.error("OR the FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable is not set for production.");
         console.error("Please follow the setup instructions in the backend-guide.md");
         process.exit(1); // Exit if no credentials can be found
     }
