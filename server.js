@@ -11,8 +11,7 @@ const allowedOrigins = [
     'http://localhost:5500', // For local testing with Live Server
     'http://127.0.0.1:5500', // For local testing
     // YOUR LIVE NETLIFY URL HAS BEEN ADDED HERE:
-    'https://coruscating-cheesecake-9bbb2f.netlify.app' 
-    'https://simav-dentalec.netlify.app/'
+    'https://simav-dentalec.netlify.app'
 ];
 
 const corsOptions = {
@@ -187,6 +186,7 @@ app.delete('/api/subjects/:subjectId/files/:fileId', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
 
 
 
