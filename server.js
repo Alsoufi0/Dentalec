@@ -10,9 +10,8 @@ const PORT = process.env.PORT || 3001; // Use a different port like 3001 for loc
 const allowedOrigins = [
     'http://localhost:5500', // For local testing with Live Server
     'http://127.0.0.1:5500', // For local testing
-    'https://app.netlify.com/projects/coruscating-cheesecake-9bbb2f/overview'
-    // IMPORTANT: Add your Netlify deployment URL here after you deploy the new frontend.
-    // e.g., 'https://your-dentalect-app.netlify.app' 
+    // YOUR LIVE NETLIFY URL HAS BEEN ADDED HERE:
+    'https://coruscating-cheesecake-9bbb2f.netlify.app' 
 ];
 
 const corsOptions = {
