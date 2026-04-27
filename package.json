@@ -7,7 +7,6 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
     "dev:server": "node --watch server/index.js",
-    "prebuild": "node scripts/assemble-frontend.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
