@@ -30,9 +30,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 
-function apiPaths(pathname) {
-  return [pathname, pathname.replace(/^\/api/, '')];
-}
+function apiPaths(pathname) { return [pathname, pathname.replace(/^\/api/, '')]; }
 function emptyStore() { return { users: [] }; }
 function loadStore() {
   try {
@@ -104,25 +102,33 @@ function trimForModel(value, limit = 1600) {
   return text.length > limit ? `${text.slice(0, limit).trim()}...` : text;
 }
 
-const tutorInstructions = `You are Simav Dental Tutor, a dental school study tutor. Search the uploaded PDFs before answering. Base your answer on uploaded course material whenever relevant snippets are found. Keep responses concise, high-yield, and useful for active recall. Use short headings and clean numbered or bulleted lines. Do not use decorative symbols or emoji. If the source truly has no relevant content, say what is missing and offer brief general dental-study background clearly labeled as general background. Never present yourself as a licensed clinician.`;
+const tutorInstructions = `You are Simav Dental Tutor, a dental school study tutor. Search the uploaded PDFs before answering. Base your answer on uploaded course material whenever relevant snippets are found. Keep responses concise, visual, high-yield, and useful for active recall. Use short headings and clean numbered or bulleted lines. Do not use decorative symbols or emoji. If the source truly has no relevant content, say what is missing and offer brief general dental-study background clearly labeled as general background. Never present yourself as a licensed clinician.`;
 const modePrompts = {
-  answer: 'Answer the student question from the uploaded PDF. Keep it under 7 concise bullets unless the student asks for more. Include page/source references when available.',
-  summary: 'Create a compact study summary with: Overview, High-yield facts, Terms to memorize, Exam traps, Active-recall checklist. Keep it concise.',
-  explanation: 'Explain the topic with plain-language idea, dental-school mechanism, clinical relevance, and one memory hook. Keep it concise.',
-  test: 'Act as an oral-exam coach. Ask 4 high-yield questions with a short answer rubric. If the student is answering, grade kindly, correct misconceptions, then ask one follow-up.',
+  answer: 'Answer from the uploaded PDF. Keep it under 7 concise bullets unless the student asks for more. Include source references when available.',
+  summary: 'Create a premium dental study summary with these exact sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. Keep it concise and study-ready.',
+  explanation: 'Explain with plain-language idea, dental-school mechanism, clinical relevance, visual analogy, and one memory hook. Keep it concise.',
+  test: 'Act as an oral-exam coach. Ask 4 high-yield questions with short answer rubrics. If the student is answering, grade kindly, correct misconceptions, then ask one follow-up.',
   flashcards: 'Create exam-ready flashcards only. Prefer short front/back cards.',
   notes: 'Create polished concise study notes with key terms, clinical relevance, and an active-recall checklist.',
   weakQuiz: 'Create a targeted 5-question weak-spot quiz with answer rubrics and short remediation notes.',
   caseStudy: 'Create one compact board-style dental case with patient snapshot, findings, diagnostic clues, 3 questions, answer key, and teaching pearl.',
-  mnemonics: 'Create memorable but professional mnemonics and a quick recall drill.'
+  mnemonics: 'Create memorable but professional mnemonics and a quick recall drill.',
+  conceptMap: 'Create a text-based concept map with nodes and arrows. Use sections: Center Concept, Branches, Mechanism Flow, Clinical Links, What To Memorize.',
+  clinicalChecklist: 'Create a chairside-style clinical checklist from the material. Use sections: Before You Start, Look For, Decision Points, Red Flags, Common Mistakes.',
+  examTraps: 'Create an exam-traps sheet. Use sections: Similar Terms, Easy-to-Miss Details, False Friends, Common Wrong Answers, Rapid Review.',
+  teachBack: 'Create a teach-back script the student can say aloud. Use sections: 30-Second Version, 2-Minute Version, Questions A Professor May Ask, Self-Check.'
 };
-const outputLimits = { answer: 750, summary: 950, explanation: 850, test: 1100, flashcards: 900, notes: 950, weakQuiz: 950, caseStudy: 1050, mnemonics: 850 };
+const outputLimits = { answer: 750, summary: 1200, explanation: 900, test: 1100, flashcards: 900, notes: 1000, weakQuiz: 950, caseStudy: 1050, mnemonics: 850, conceptMap: 1000, clinicalChecklist: 900, examTraps: 950, teachBack: 850 };
 const artifactPrompts = {
   flashcards: 'Create 10 concise dental flashcards from the uploaded material. Return only valid JSON: {"cards":[{"question":"...","answer":"..."}]}. No markdown. No commentary.',
-  notes: 'Create polished study notes from the uploaded material. Use headings, concise bullets, key terms, clinical relevance, and a final active-recall checklist.',
+  notes: 'Create premium study notes from the uploaded material. Use headings, concise bullets, key terms, clinical relevance, a visual structure map, and a final active-recall checklist.',
   weakQuiz: 'Create a targeted weak-spot quiz from the uploaded material. Include 5 questions, answer rubric, and one short remediation note for each.',
   caseStudy: 'Create one compact board-style dental case study from the uploaded material. Use: Patient Snapshot, Chief Complaint, Key Findings, Diagnostic Clues, Three Questions, Answer Key, Teaching Pearl.',
-  mnemonics: 'Create memorable mnemonics for the selected dental material. Use: Key Facts, Mnemonics, Why It Works, Quick Recall Drill.'
+  mnemonics: 'Create memorable mnemonics for the selected dental material. Use: Key Facts, Mnemonics, Why It Works, Quick Recall Drill.',
+  conceptMap: 'Create a text concept map from the uploaded material. Use arrows with plain ASCII like A -> B. Include center concept, branches, mechanism flow, and clinical links.',
+  clinicalChecklist: 'Create a practical clinical checklist from the uploaded material. Include decision points, red flags, chairside sequence, and common mistakes.',
+  examTraps: 'Create an exam-traps sheet from the uploaded material. Include confusing terms, common wrong answers, must-know exceptions, and quick review.',
+  teachBack: 'Create a teach-back drill from the uploaded material. Include a 30-second explanation, a 2-minute explanation, professor follow-ups, and self-check questions.'
 };
 const personaInstructions = {
   peer: 'Tutor persona: supportive peer. Warm, clear, and efficient.',
@@ -156,7 +162,7 @@ async function createResponse({ vectorStoreId, input, mode, history, persona = '
     instructions: `${tutorInstructions}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nMode: ${mode}. ${modePrompts[mode] ?? modePrompts.answer}`,
     input: buildConversationInput(input, history),
     max_output_tokens: outputLimits[mode] ?? 850,
-    tools: [{ type: 'file_search', vector_store_ids: [vectorStoreId], max_num_results: mode === 'test' || mode === 'caseStudy' ? 4 : 3 }]
+    tools: [{ type: 'file_search', vector_store_ids: [vectorStoreId], max_num_results: ['test', 'caseStudy', 'conceptMap'].includes(mode) ? 4 : 3 }]
   });
   return response.output_text;
 }
