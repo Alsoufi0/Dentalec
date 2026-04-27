@@ -1,4 +1,4 @@
-const CACHE_NAME = 'simav-dental-tutor-v5';
+const CACHE_NAME = 'simav-dental-tutor-v6';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {
