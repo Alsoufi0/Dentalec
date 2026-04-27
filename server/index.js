@@ -149,6 +149,72 @@ const modePrompts = {
     'Answer the student question using the uploaded PDF material. If the wording is broad, search for the key dental concepts and synthesize the relevant parts. Include source/page references when available.'
 };
 
+function apiPaths(pathname) {
+  return [pathname, pathname.replace(/^\/api/, '')];
+}
+
+async function handleUpload(req, res) {
+  if (!req.files?.length) {
+    res.status(400).json({ error: 'Upload at least one PDF.' });
+    return;
+  }
+
+  try {
+    const vectorStore = await openaiClient.vectorStores.create({
+      name: `Simav Dental Tutor study set ${new Date().toISOString()}`
+    });
+
+    const uploadedFiles = [];
+    for (const file of req.files) {
+      const openaiFile = await openaiClient.files.create({
+        file: await toFile(fs.createReadStream(file.path), file.originalname, {
+          type: file.mimetype || 'application/pdf'
+        }),
+        purpose: 'assistants'
+      });
+
+      await openaiClient.vectorStores.files.createAndPoll(vectorStore.id, {
+        file_id: openaiFile.id
+      });
+
+      uploadedFiles.push({
+        originalName: file.originalname,
+        fileId: openaiFile.id
+      });
+    }
+
+    const studySet = {
+      vectorStoreId: vectorStore.id,
+      files: uploadedFiles
+    };
+    req.user.studyState = {
+      studySet,
+      chat: [
+        {
+          role: 'assistant',
+          text: 'Your PDF set is indexed. You can ask a question, request a summary, or switch to Test mode for an oral exam.',
+          mode: 'answer',
+          id: crypto.randomUUID()
+        }
+      ],
+      flashcards: [],
+      notes: '',
+      page: 'dashboard',
+      voicePersona: 'peer',
+      updatedAt: new Date().toISOString()
+    };
+    saveStore();
+
+    res.json(studySet);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    for (const file of req.files || []) {
+      fs.rm(file.path, { force: true }, () => {});
+    }
+  }
+}
+
 const artifactPrompts = {
   flashcards:
     'Create 12 concise dental flashcards from the provided material. Return only valid JSON with this shape: {"cards":[{"question":"...","answer":"..."}]}. Focus on exam-relevant mechanisms, definitions, classifications, clinical consequences, and anatomy.',
@@ -222,11 +288,11 @@ async function createResponse({ vectorStoreId, input, mode, history, persona = '
   return response.output_text;
 }
 
-app.get('/api/health', (_req, res) => {
+app.get(apiPaths('/api/health'), (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/signup', (req, res) => {
+app.post(apiPaths('/api/auth/signup'), (req, res) => {
   const name = String(req.body.name || '').trim();
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
@@ -264,7 +330,7 @@ app.post('/api/auth/signup', (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post(apiPaths('/api/auth/login'), (req, res) => {
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '');
   const user = store.users.find((item) => item.email === email);
@@ -279,21 +345,21 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
+app.get(apiPaths('/api/auth/me'), requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
-app.post('/api/auth/logout', requireAuth, (req, res) => {
+app.post(apiPaths('/api/auth/logout'), requireAuth, (req, res) => {
   authSessions.delete(req.authToken);
   res.setHeader('Set-Cookie', clearSessionCookie());
   res.json({ ok: true });
 });
 
-app.get('/api/session', requireAuth, (req, res) => {
+app.get(apiPaths('/api/session'), requireAuth, (req, res) => {
   res.json({ studyState: req.user.studyState || null });
 });
 
-app.put('/api/session', requireAuth, (req, res) => {
+app.put(apiPaths('/api/session'), requireAuth, (req, res) => {
   const { studySet = null, chat = [], flashcards = [], notes = '', page = 'dashboard', voicePersona = 'peer' } = req.body || {};
   req.user.studyState = {
     studySet,
@@ -308,75 +374,15 @@ app.put('/api/session', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/session', requireAuth, (req, res) => {
+app.delete(apiPaths('/api/session'), requireAuth, (req, res) => {
   req.user.studyState = null;
   saveStore();
   res.json({ ok: true });
 });
 
-app.post('/api/upload', requireAuth, requireApiKey, upload.array('pdfs', 8), async (req, res) => {
-  if (!req.files?.length) {
-    res.status(400).json({ error: 'Upload at least one PDF.' });
-    return;
-  }
+app.post(apiPaths('/api/upload'), requireAuth, requireApiKey, upload.array('pdfs', 8), handleUpload);
 
-  try {
-    const vectorStore = await openaiClient.vectorStores.create({
-      name: `Simav Dental Tutor study set ${new Date().toISOString()}`
-    });
-
-    const uploadedFiles = [];
-    for (const file of req.files) {
-      const openaiFile = await openaiClient.files.create({
-        file: await toFile(fs.createReadStream(file.path), file.originalname, {
-          type: file.mimetype || 'application/pdf'
-        }),
-        purpose: 'assistants'
-      });
-
-      await openaiClient.vectorStores.files.createAndPoll(vectorStore.id, {
-        file_id: openaiFile.id
-      });
-
-      uploadedFiles.push({
-        originalName: file.originalname,
-        fileId: openaiFile.id
-      });
-    }
-
-    const studySet = {
-      vectorStoreId: vectorStore.id,
-      files: uploadedFiles
-    };
-    req.user.studyState = {
-      studySet,
-      chat: [
-        {
-          role: 'assistant',
-          text: 'Your PDF set is indexed. You can ask a question, request a summary, or switch to Test mode for an oral exam.',
-          mode: 'answer',
-          id: crypto.randomUUID()
-        }
-      ],
-      flashcards: [],
-      notes: '',
-      page: 'dashboard',
-      voicePersona: 'peer',
-      updatedAt: new Date().toISOString()
-    };
-    saveStore();
-
-    res.json(studySet);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  } finally {
-    for (const file of req.files) {
-      fs.rm(file.path, { force: true }, () => {});
-    }
-  }
-});
-
-app.post('/api/study', requireAuth, requireApiKey, async (req, res) => {
+app.post(apiPaths('/api/study'), requireAuth, requireApiKey, async (req, res) => {
   const { vectorStoreId, message, mode = 'answer', history = [], persona = 'peer' } = req.body;
   if (!vectorStoreId || !message) {
     res.status(400).json({ error: 'vectorStoreId and message are required.' });
@@ -391,7 +397,7 @@ app.post('/api/study', requireAuth, requireApiKey, async (req, res) => {
   }
 });
 
-app.post('/api/artifact', requireAuth, requireApiKey, async (req, res) => {
+app.post(apiPaths('/api/artifact'), requireAuth, requireApiKey, async (req, res) => {
   const { vectorStoreId, type = 'notes', source = '', history = [], persona = 'peer' } = req.body;
   if (!vectorStoreId) {
     res.status(400).json({ error: 'vectorStoreId is required.' });
@@ -421,7 +427,7 @@ app.post('/api/artifact', requireAuth, requireApiKey, async (req, res) => {
   }
 });
 
-app.post('/api/transcribe', requireAuth, requireApiKey, upload.single('audio'), async (req, res) => {
+app.post(apiPaths('/api/transcribe'), requireAuth, requireApiKey, upload.single('audio'), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: 'Audio file is required.' });
     return;
@@ -445,7 +451,7 @@ app.post('/api/transcribe', requireAuth, requireApiKey, upload.single('audio'), 
   }
 });
 
-app.post('/api/speak', requireAuth, requireApiKey, async (req, res) => {
+app.post(apiPaths('/api/speak'), requireAuth, requireApiKey, async (req, res) => {
   const { text, voice = 'cedar', persona = 'peer' } = req.body;
   if (!text) {
     res.status(400).json({ error: 'Text is required.' });
@@ -464,7 +470,7 @@ app.post('/api/speak', requireAuth, requireApiKey, async (req, res) => {
   res.json({ speechId: id, audioUrl: `/api/speak/${id}` });
 });
 
-app.get('/api/speak/:id', requireAuth, requireApiKey, async (req, res) => {
+app.get(apiPaths('/api/speak/:id'), requireAuth, requireApiKey, async (req, res) => {
   const session = speechSessions.get(req.params.id);
   if (!session || session.userId !== req.user.id) {
     res.status(404).json({ error: 'Speech session expired.' });
@@ -506,6 +512,14 @@ setInterval(() => {
     if (session.createdAt < expiresBefore) speechSessions.delete(id);
   }
 }, 60 * 1000).unref();
+
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/') || req.method !== 'GET') {
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+    return;
+  }
+  next();
+});
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
