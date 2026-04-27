@@ -83,7 +83,7 @@ Recommended simple deployment:
 3. Use:
 
 ```bash
-npm ci && npm run build
+npm install && npm run build
 ```
 
 as the build command.
