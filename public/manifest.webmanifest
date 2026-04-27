@@ -1,0 +1,18 @@
+{
+  "name": "Simav Dental Tutor",
+  "short_name": "Simav Tutor",
+  "description": "AI study tutor for dental PDFs, summaries, quizzes, flashcards, and voice study sessions.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f2",
+  "theme_color": "#196b5f",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
