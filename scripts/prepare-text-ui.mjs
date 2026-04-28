@@ -17,7 +17,7 @@ if (!main.includes('textSource, setTextSource')) {
     if (text.length < 80) { setError('Paste at least a short paragraph of study text.'); return; }
     stopAudio(); setBusy('upload'); setError('');
     try {
-      const r = await fetch(`${API}/text-source`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: textTitle || 'Pasted study notes', text }) });
+      const r = await fetch(API + '/text-source', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: textTitle || 'Pasted study notes', text }) });
       const d = await readJson(r, 'Text indexing failed.');
       setStudySet(d); setTextSource(''); setTextTitle(''); go('dashboard');
       setChat([{ id: crypto.randomUUID(), role: 'assistant', mode: 'answer', text: 'Your pasted text is indexed. Ask questions, request a complete explanation, or generate study tools.' }]);
