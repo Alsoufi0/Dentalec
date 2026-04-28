@@ -1,0 +1,28 @@
+.mark {
+  overflow: hidden !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.mark svg {
+  display: none !important;
+}
+
+.mark::before {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: url('/icons/icon.svg') center / cover no-repeat;
+  box-shadow: 0 12px 26px rgba(16, 80, 70, 0.22);
+}
+
+.auth .mark::before {
+  width: 48px;
+  height: 48px;
+}
+
+.brand h1 {
+  letter-spacing: -0.01em;
+}
