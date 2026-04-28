@@ -40,18 +40,10 @@ server = server.replace(
   "tools: [{ type: 'file_search', vector_store_ids: [vectorStoreId], max_num_results: ['test', 'caseStudy'].includes(mode) ? 3 : 2 }]"
 );
 
-const oldArtifact = `  try {
-    const prompt = artifactPrompts[type] ?? artifactPrompts.notes;
-    const text = await createResponse({ vectorStoreId, mode: type, history, persona, input: \`${'${prompt}'}\\n\\nStudent-selected material or request:\\n${'${source || \'Use the uploaded PDF study set.\''}\`} });
-    if (type === 'flashcards') {
-      const cards = parseCardsFromText(text);
-      return res.json({ text: cards.length ? \`Created ${'${cards.length}'} flashcards.\` : 'No flashcards were created from the model output.', cards });
-    }
-    res.json({ text });
-  } catch (error) { res.status(500).json({ error: error.message }); }
-});`;
-
-const newArtifact = `  try {
+const artifactRoute = `app.post(apiPaths('/api/artifact'), requireAuth, requireApiKey, async (req, res) => {
+  const { vectorStoreId, type = 'notes', source = '', history = [], persona = 'peer' } = req.body;
+  if (!vectorStoreId) return res.status(400).json({ error: 'vectorStoreId is required.' });
+  try {
     const prompt = artifactPrompts[type] ?? artifactPrompts.notes;
     const cache = getArtifactCache(req.user);
     const cacheKey = artifactCacheKey({ vectorStoreId, type, source, persona });
@@ -74,8 +66,9 @@ const newArtifact = `  try {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });`;
 
-if (server.includes(oldArtifact) && !server.includes('cached: true')) {
-  server = server.replace(oldArtifact, newArtifact);
-}
+server = server.replace(
+  /app\.post\(apiPaths\('\/api\/artifact'\), requireAuth, requireApiKey, async \(req, res\) => \{[\s\S]*?\n\}\);\napp\.post\(apiPaths\('\/api\/transcribe'\)/,
+  `${artifactRoute}\napp.post(apiPaths('/api/transcribe')`
+);
 
 fs.writeFileSync(serverPath, server);
