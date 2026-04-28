@@ -49,10 +49,17 @@ const artifactRoute = `app.post(apiPaths('/api/artifact'), requireAuth, requireA
     const cacheKey = artifactCacheKey({ vectorStoreId, type, source, persona });
     if (cache[cacheKey]) return res.json({ ...cache[cacheKey], cached: true });
 
-    const text = await createResponse({ vectorStoreId, mode: type, history: history.slice(-3), persona, input: \`${'${prompt}'}\\n\\nStudent-selected material or request:\\n${'${source || \'Use the uploaded PDF study set.\''}\`} });
+    const selectedMaterial = source || 'Use the uploaded PDF study set.';
+    const text = await createResponse({
+      vectorStoreId,
+      mode: type,
+      history: history.slice(-3),
+      persona,
+      input: prompt + '\\n\\nStudent-selected material or request:\\n' + selectedMaterial
+    });
     if (type === 'flashcards') {
       const cards = parseCardsFromText(text);
-      const payload = { text: cards.length ? \`Created ${'${cards.length}'} flashcards.\` : 'No flashcards were created from the model output.', cards };
+      const payload = { text: cards.length ? 'Created ' + cards.length + ' flashcards.' : 'No flashcards were created from the model output.', cards };
       cache[cacheKey] = payload;
       req.user.studyCache.updatedAt = new Date().toISOString();
       saveStore();
