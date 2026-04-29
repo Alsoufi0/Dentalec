@@ -12,7 +12,7 @@ if (!main.includes('answerStyle')) {
 
   main = main.replace(
     "const q = text.trim(); if (!q || !hasStudy) return;",
-    "const q = text.trim(); if (!q || !hasStudy) return;\n    const styleInstruction = answerStyle === 'text' ? 'Answer style: concise paragraph text. Explain like a patient tutor for a dental student, use simple language, include must-know details, and end with a one-sentence recap.' : 'Answer style: bullet points. Explain simply, include must-know details, highlight exam-important facts, and end with a quick recap.';"
+    "const q = text.trim(); if (!q || !hasStudy) return;\n    const styleInstruction = answerStyle === 'text' ? 'Answer style: clear paragraph explanation. Use easy language first, then precise dental terms. Include all crucial exam details from the source: mechanism, examples, indications, percentages/concentrations, frequency/how to use, what it does, and what to memorize. If a detail is missing from the source, say the source does not specify it.' : 'Answer style: organized bullet points. Use easy language first, then precise dental terms. Include all crucial exam details from the source: mechanism, examples, indications, percentages/concentrations, frequency/how to use, what it does, and what to memorize. If a detail is missing from the source, say the source does not specify it.';"
   );
 
   main = main.replace(
@@ -28,7 +28,7 @@ if (!main.includes('answerStyle')) {
 
 main = main.replace(
   'const stream = await navigator.mediaDevices.getUserMedia({ audio: true });\n      const rec = new MediaRecorder(stream); recorder.current = rec; chunks.current = [];',
-  "const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });\n      const mimeChoices = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac'];\n      const chosenMime = mimeChoices.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';\n      const rec = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined); recorder.current = rec; chunks.current = [];\n      const recordingMime = rec.mimeType || chosenMime || 'audio/webm';"
+  "const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });\n      const mimeChoices = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac'];\n      const chosenMime = mimeChoices.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';\n      const rec = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined); recorder.current = rec; chunks.current = [];\n      const recordingMime = rec.mimeType || chosenMime || 'audio/webm';"
 );
 
 main = main.replace(
@@ -40,14 +40,31 @@ main = main.replace('rec.start(); setRecording(true);', 'rec.start(250); setReco
 main = main.replace("} catch { setError('Microphone permission is required for voice study.'); }", "} catch (recordError) { setError(recordError?.message || 'Microphone permission is required for voice study.'); }");
 
 main = main.replace(
-  'await a.play();\n    } catch (err) { if (err.name !== \'AbortError\') setError(err.message); stopAudio(); }',
-  "await a.play();\n    } catch (err) { if (err.name !== 'AbortError') setError(err.message?.includes('play') ? 'Audio was created, but your browser blocked playback. Tap Listen again after the page is active.' : err.message); stopAudio(); }"
+  "const text = clean(item.text).slice(0, 900);",
+  "const text = clean(item.text).replace(/\\s+/g, ' ').trim().slice(0, 780);"
+);
+main = main.replace(
+  "const a = new Audio(d.audioUrl); audio.current = a;\n      a.onended = () => { if (speechRun.current === run) stopAudio(); };\n      await a.play();",
+  "const a = new Audio(d.audioUrl); audio.current = a;\n      a.onerror = () => { if (speechRun.current === run) setError('Audio playback failed. Try a shorter answer or refresh the page.'); stopAudio(); };\n      a.onended = () => { if (speechRun.current === run) stopAudio(); };\n      await a.play();"
+);
+main = main.replace(
+  "} catch (err) { if (err.name !== 'AbortError') setError(err.message); stopAudio(); }",
+  "} catch (err) { if (err.name !== 'AbortError') setError(err.message?.includes('play') ? 'Audio was created, but the browser blocked playback. Tap Listen again after the page is active.' : err.message); stopAudio(); }"
 );
 
 fs.writeFileSync(mainPath, main);
 
 let styles = fs.readFileSync(stylesPath, 'utf8');
 if (!styles.includes('answer-style-select')) {
-  styles += `\n.answer-style-select {\n  min-height: 42px;\n  border: 1px solid var(--border);\n  border-radius: 10px;\n  color: var(--text);\n  background: var(--surface-2);\n  font-weight: 780;\n}\n`;
+  styles += `
+.answer-style-select {
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-2);
+  font-weight: 780;
+}
+`;
 }
 fs.writeFileSync(stylesPath, styles);
