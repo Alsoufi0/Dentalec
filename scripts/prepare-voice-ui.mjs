@@ -4,15 +4,18 @@ const mainPath = 'src/main.jsx';
 const stylesPath = 'src/styles.css';
 let main = fs.readFileSync(mainPath, 'utf8');
 
+const textStyle = "Answer style: text explanation. Write in clear short paragraphs, not a long wall of text and not bullets. Use simple language first, then the exact dental terms. Cover all crucial details from the source when present: definition, mechanism, clinical importance, classifications/types, examples, concentrations/percentages, frequency/how to use, what it does to the tooth/tissue/bacteria, indications, cautions, patient instructions, exam traps, and what to memorize. If a crucial number or detail is not in the source, say the source does not specify it instead of guessing.";
+const bulletStyle = "Answer style: organized bullet points. Keep bullets compact but complete. Cover all crucial details from the source when present: definition, mechanism, clinical importance, classifications/types, examples, concentrations/percentages, frequency/how to use, what it does to the tooth/tissue/bacteria, indications, cautions, patient instructions, exam traps, and what to memorize. If a crucial number or detail is not in the source, say the source does not specify it instead of guessing.";
+
 if (!main.includes('answerStyle')) {
   main = main.replace(
     "const [persona, setPersona] = useState('peer');",
-    "const [persona, setPersona] = useState('peer');\n  const [answerStyle, setAnswerStyle] = useState('bullets');"
+    "const [persona, setPersona] = useState('peer');\n  const [answerStyle, setAnswerStyle] = useState('text');"
   );
 
   main = main.replace(
     "const q = text.trim(); if (!q || !hasStudy) return;",
-    "const q = text.trim(); if (!q || !hasStudy) return;\n    const styleInstruction = answerStyle === 'text' ? 'Answer style: clear paragraph explanation. Use easy language first, then precise dental terms. Include all crucial exam details from the source: mechanism, examples, indications, percentages/concentrations, frequency/how to use, what it does, and what to memorize. If a detail is missing from the source, say the source does not specify it.' : 'Answer style: organized bullet points. Use easy language first, then precise dental terms. Include all crucial exam details from the source: mechanism, examples, indications, percentages/concentrations, frequency/how to use, what it does, and what to memorize. If a detail is missing from the source, say the source does not specify it.';"
+    `const q = text.trim(); if (!q || !hasStudy) return;\n    const styleInstruction = answerStyle === 'text' ? '${textStyle}' : '${bulletStyle}';`
   );
 
   main = main.replace(
@@ -22,7 +25,17 @@ if (!main.includes('answerStyle')) {
 
   main = main.replace(
     '</select><nav>',
-    '</select><select className="answer-style-select" value={answerStyle} onChange={(e) => setAnswerStyle(e.target.value)}><option value="bullets">Bullet points</option><option value="text">Text explanation</option></select><nav>'
+    '</select><select className="answer-style-select" value={answerStyle} onChange={(e) => setAnswerStyle(e.target.value)}><option value="text">Text explanation</option><option value="bullets">Bullet points</option></select><nav>'
+  );
+} else {
+  main = main.replace("const [answerStyle, setAnswerStyle] = useState('bullets');", "const [answerStyle, setAnswerStyle] = useState('text');");
+  main = main.replace(
+    /const styleInstruction = answerStyle === 'text' \? '.*?' : '.*?';/,
+    `const styleInstruction = answerStyle === 'text' ? '${textStyle}' : '${bulletStyle}';`
+  );
+  main = main.replace(
+    '<option value="bullets">Bullet points</option><option value="text">Text explanation</option>',
+    '<option value="text">Text explanation</option><option value="bullets">Bullet points</option>'
   );
 }
 
