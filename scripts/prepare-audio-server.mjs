@@ -14,7 +14,7 @@ server = server.replace(
 );
 
 const speakRoutePattern = /app\.post\(apiPaths\('\/api\/speak'\), requireAuth, requireApiKey, \(req, res\) => \{[\s\S]*?\n\}\);\napp\.get\(apiPaths\('\/api\/speak\/:id'\)/;
-const stableSpeakRoute = `app.post(apiPaths('/api/speak'), requireAuth, requireApiKey, async (req, res) => {
+const stableSpeakRoute = String.raw`app.post(apiPaths('/api/speak'), requireAuth, requireApiKey, async (req, res) => {
   const { text, voice = 'alloy', persona = 'peer' } = req.body;
   const cleanText = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 850);
   if (!cleanText) return res.status(400).json({ error: 'Text is required.' });
@@ -53,5 +53,6 @@ server = server.replace(
   "const speech = await openaiClient.audio.speech.create({ model: 'gpt-4o-mini-tts', voice: session.voice, input: session.text, instructions: session.persona === 'professor' ? 'Formal, crisp dental professor.' : session.persona === 'clinic' ? 'Calm clinical dental mentor.' : 'Supportive dental school study peer.' });",
   "const allowedVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];\n    const voiceName = allowedVoices.includes(session.voice) ? session.voice : 'alloy';\n    const speech = await openaiClient.audio.speech.create({ model: 'gpt-4o-mini-tts', voice: voiceName, input: session.text, response_format: 'mp3', instructions: session.persona === 'professor' ? 'Formal but natural dental professor. Speak clearly, with short pauses between key ideas.' : session.persona === 'clinic' ? 'Calm clinical dental mentor. Speak naturally and explain chairside relevance.' : 'Supportive dental school study peer. Sound natural, warm, and clear, not robotic.' });"
 );
+server = server.replace(/replace\(\/s\+\/g/g, 'replace(/\\s+/g');
 
 fs.writeFileSync(serverPath, server);
