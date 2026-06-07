@@ -1,0 +1,252 @@
+UUID() },
+          { role: 'assistant', text: 'Paused. Ask me for the next explanation, summary, or quiz when you are ready.', mode, id: crypto.randomUUID() }
+        ]);
+        return;
+      }
+      setMessage(data.text);
+      await submitStudy(data.text, { speak: true });
+    } catch (voiceError) {
+      setError(voiceError.message);
+      setVoiceStatus('Voice error');
+    } finally {
+      busyRef.current = '';
+      setBusy('');
+    }
+  }
+
+  async function speak(item, options = {}) {
+    if (speakingId === item.id && !options.force) {
+      stopSpeech();
+      return;
+    }
+
+    stopSpeech(false);
+    pauseStudyBuddyForTutor();
+    tutorSpeakingRef.current = true;
+    setSpeakingId(item.id);
+    setVoiceStatus('Preparing voice');
+    setError('');
+    speechItemRef.current = item.id;
+    lastTutorSpeechRef.current = clipSpokenText(item.text);
+    const controller = new AbortController();
+    speechControllerRef.current = controller;
+
+    try {
+      const response = await fetch(`${API_BASE}/speak`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: lastTutorSpeechRef.current,
+          voice: voicePersonas.find((persona) => persona.id === voicePersona)?.voice || 'cedar',
+          persona: voicePersona
+        }),
+        signal: controller.signal
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Speech failed');
+
+      const audio = new Audio(`${API_BASE.replace(/\/api$/, '')}${data.audioUrl}`);
+      audioRef.current = audio;
+      audio.preload = 'auto';
+      audio.oncanplay = () => setVoiceStatus('Speaking');
+      audio.onended = () => {
+        if (speechItemRef.current === item.id) {
+          speechItemRef.current = '';
+          resumeStudyBuddyAfterTutor();
+        }
+      };
+      audio.onerror = () => {
+        if (speechItemRef.current === item.id) {
+          speechItemRef.current = '';
+          tutorSpeakingRef.current = false;
+          setVoiceStatus('Voice error');
+          setSpeakingId(null);
+        }
+      };
+      await audio.play();
+    } catch (speechError) {
+      if (speechError.name !== 'AbortError') {
+        setError(speechError.message);
+        setVoiceStatus('Voice error');
+      }
+      tutorSpeakingRef.current = false;
+      setSpeakingId(null);
+      if (conversationMode) resumeStudyBuddyAfterTutor();
+    } finally {
+      if (speechControllerRef.current === controller) {
+        speechControllerRef.current = null;
+      }
+    }
+  }
+
+  function quickPrompt() {
+    const prompts = {
+      summary: 'Summarize the uploaded chapter for a dental exam.',
+      explanation: 'Explain the most important concept in this PDF with clinical relevance.',
+      test: 'Quiz me orally on the uploaded material.',
+      answer: 'What are the highest-yield facts I should know from this PDF?'
+    };
+    setMessage(prompts[mode]);
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    setAuthError('');
+    const endpoint = authMode === 'signup' ? 'signup' : 'login';
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authForm)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not sign in.');
+      setAuth({ status: 'authenticated', user: data.user });
+      setAuthForm({ name: '', email: '', password: '' });
+      setSessionLoaded(false);
+    } catch (loginError) {
+      setAuthError(loginError.message);
+    }
+  }
+
+  async function logout() {
+    stopSpeech(false);
+    stopStudyBuddy();
+    await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+    if (auth.user?.id) localStorage.removeItem(stateKeyForUser(auth.user.id));
+    applyStudyState({});
+    setFiles([]);
+    setMessage('');
+    setError('');
+    setSessionLoaded(false);
+    setAuth({ status: 'guest', user: null });
+  }
+
+  const ActivePageIcon = activePage.icon;
+
+  if (auth.status === 'loading') {
+    return (
+      <main className="app-shell auth-shell">
+        <section className="auth-panel">
+          <div className="brand-mark">
+            <GraduationCap size={24} />
+          </div>
+          <h1>Simav Dental Tutor</h1>
+          <p>Preparing your study workspace</p>
+          <Loader2 className="spin" size={22} />
+        </section>
+      </main>
+    );
+  }
+
+  if (!auth.user) {
+    return (
+      <main className="app-shell auth-shell">
+        <section className="auth-panel">
+          <div className="auth-topbar">
+            <div className="brand-mark">
+              <GraduationCap size={24} />
+            </div>
+            <button
+              type="button"
+              className="ghost-button theme-toggle"
+              onClick={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              {theme === 'dark' ? 'Light' : 'Dark'}
+            </button>
+          </div>
+          <div className="auth-copy">
+            <p>Private dental study workspace</p>
+            <h1>{authMode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+            <span>Simav Dental Tutor helps you turn dental PDFs into summaries, explanations, oral tests, flashcards, and voice study sessions.</span>
+          </div>
+          <div className="guide-list" aria-label="How to use Simav Dental Tutor">
+            <article>
+              <strong>1. Create your private account</strong>
+              <span>Your study history, notes, and flashcards stay saved across devices.</span>
+            </article>
+            <article>
+              <strong>2. Upload a dental PDF</strong>
+              <span>Use a lecture, textbook chapter, handout, or exam review file.</span>
+            </article>
+            <article>
+              <strong>3. Pick a study mode</strong>
+              <span>Ask questions, request a summary, generate a case, or start an oral test.</span>
+            </article>
+            <article>
+              <strong>4. Turn on Study Buddy</strong>
+              <span>Speak naturally, listen to answers, and study hands-free when microphone access is available.</span>
+            </article>
+          </div>
+          <form className="auth-form" onSubmit={submitAuth}>
+            {authMode === 'signup' && (
+              <label>
+                Name
+                <input
+                  value={authForm.name}
+                  onChange={(event) => setAuthForm((form) => ({ ...form, name: event.target.value }))}
+                  placeholder="Dental student"
+                  autoComplete="name"
+                />
+              </label>
+            )}
+            <label>
+              Email
+              <input
+                type="email"
+                value={authForm.email}
+                onChange={(event) => setAuthForm((form) => ({ ...form, email: event.target.value }))}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authForm.password}
+                onChange={(event) => setAuthForm((form) => ({ ...form, password: event.target.value }))}
+                placeholder="At least 8 characters"
+                autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+              />
+            </label>
+            {authError && <div className="error auth-error">{authError}</div>}
+            <button type="submit" className="auth-submit">
+              {authMode === 'signup' ? <UserPlus size={18} /> : <Sparkles size={18} />}
+              {authMode === 'signup' ? 'Create account' : 'Sign in'}
+            </button>
+          </form>
+          <button type="button" className="auth-switch" onClick={() => setAuthMode((value) => (value === 'signup' ? 'login' : 'signup'))}>
+            {authMode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'}
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="app-shell">
+      <section className="workspace">
+        <aside className="study-panel">
+          <div className="brand-row">
+            <div className="brand-mark">
+              <GraduationCap size={24} />
+            </div>
+            <div>
+              <h1>Simav Dental Tutor</h1>
+              <p>ChatGPT PDF study assistant</p>
+            </div>
+          </div>
+
+          <div className="account-strip">
+            <span>Signed in</span>
+            <strong>{auth.user.name}</strong>
+          </div>
+
+          {studySet && (
+            <div className="source-strip" title={fileNames}>
+              <span>C

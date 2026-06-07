@@ -1,0 +1,237 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import {
+  BookOpen,
+  BookmarkPlus,
+  Brain,
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  FileQuestion,
+  FileText,
+  GraduationCap,
+  Headphones,
+  LayoutDashboard,
+  Library,
+  Loader2,
+  MessageCircleQuestion,
+  Mic,
+  Moon,
+  Pause,
+  Send,
+  Sparkles,
+  Square,
+  Sun,
+  Upload,
+  UserPlus,
+  Volume2
+} from 'lucide-react';
+import './styles.css';
+
+const API_BASE = '/api';
+const STORAGE_KEY = 'simav-dental-tutor-state-v1';
+const THEME_KEY = 'simav-dental-tutor-theme-v1';
+const SPOKEN_TEXT_LIMIT = 1400;
+
+const modes = [
+  { id: 'answer', label: 'Q&A', icon: MessageCircleQuestion, hint: 'ask anything', prompt: 'Ask about caries, anatomy, procedures, pathology, or any uploaded PDF detail.' },
+  { id: 'summary', label: 'Summary', icon: BookOpen, hint: 'chapter recap', prompt: 'Generate high-yield summaries, exam traps, and active-recall checklists.' },
+  { id: 'explanation', label: 'Explain', icon: Brain, hint: 'teach a topic', prompt: 'Ask for a clear explanation with mechanism, clinical relevance, and memory hooks.' },
+  { id: 'test', label: 'Test', icon: FileQuestion, hint: 'oral exam', prompt: 'Practice oral exam questions, grade your answers, and target weak spots.' }
+];
+
+const pages = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, hint: 'overview', prompt: 'Your study hub: progress, next actions, and current PDF set.' },
+  { id: 'library', label: 'Library', icon: Upload, hint: 'PDFs', prompt: 'Upload and index dental textbooks, lectures, and handouts.' },
+  ...modes,
+  { id: 'kit', label: 'Study Kit', icon: Library, hint: 'notes & cards', prompt: 'Saved notes, generated flashcards, exports, and review material.' }
+];
+
+const stopPhrases = [
+  'thank you',
+  'thanks',
+  'stop',
+  'stop talking',
+  'pause',
+  'be quiet',
+  'that is enough',
+  'thats enough',
+  "that's enough"
+];
+
+const voicePersonas = [
+  { id: 'peer', label: 'Supportive Peer', voice: 'cedar' },
+  { id: 'professor', label: 'Stern Professor', voice: 'cedar' },
+  { id: 'clinic', label: 'Clinical Mentor', voice: 'cedar' }
+];
+
+const topicKeywords = [
+  { topic: 'Dental Caries', terms: ['caries', 'decay', 'demineralization', 'plaque', 'enamel', 'dentin'] },
+  { topic: 'Endodontics', terms: ['pulp', 'root canal', 'periapical', 'apex', 'endodontic'] },
+  { topic: 'Periodontics', terms: ['periodontal', 'gingiva', 'pocket', 'calculus', 'attachment'] },
+  { topic: 'Anatomy', terms: ['nerve', 'foramen', 'mandibular', 'maxillary', 'cranial', 'canal'] },
+  { topic: 'Pharmacology', terms: ['drug', 'anesthetic', 'antibiotic', 'dose', 'contraindication'] },
+  { topic: 'Radiology', terms: ['radiograph', 'x-ray', 'radiolucent', 'radiopaque', 'cbct'] }
+];
+
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function clipSpokenText(text) {
+  const clean = stripMarkdown(text);
+  if (clean.length <= SPOKEN_TEXT_LIMIT) return clean;
+  const clipped = clean.slice(0, SPOKEN_TEXT_LIMIT);
+  const lastSentence = Math.max(clipped.lastIndexOf('. '), clipped.lastIndexOf('? '), clipped.lastIndexOf('! '));
+  return `${clipped.slice(0, lastSentence > 700 ? lastSentence + 1 : SPOKEN_TEXT_LIMIT).trim()} I paused there to keep the spoken answer short. Ask me to continue if you want more.`;
+}
+
+function stateKeyForUser(userId) {
+  return `${STORAGE_KEY}:${userId}`;
+}
+
+function InlineText({ text }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+  });
+}
+
+function ResponseContent({ text, mode }) {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) return null;
+
+  return (
+    <div className={mode === 'test' ? 'answer-content test-answer' : 'answer-content'}>
+      {lines.map((line, index) => {
+        const heading = line.replace(/^#{1,6}\s*/, '');
+        const numbered = heading.match(/^(\d+)\.\s+(.*)/);
+        const bullet = heading.match(/^[-*]\s+(.*)/);
+        const isHeading =
+          /^#{1,6}\s/.test(line) ||
+          (/^[A-Z][^.!?]{2,48}:$/.test(heading) && !numbered) ||
+          (mode === 'test' && /question|answer|rubric|explanation|challenge|case|vignette/i.test(heading));
+
+        if (numbered) {
+          return (
+            <div className="answer-row numbered" key={`${line}-${index}`}>
+              <span>{numbered[1]}</span>
+              <p>
+                <InlineText text={numbered[2]} />
+              </p>
+            </div>
+          );
+        }
+
+        if (bullet) {
+          return (
+            <div className="answer-row bullet" key={`${line}-${index}`}>
+              <span></span>
+              <p>
+                <InlineText text={bullet[1]} />
+              </p>
+            </div>
+          );
+        }
+
+        if (isHeading) {
+          return (
+            <h3 key={`${line}-${index}`}>
+              <InlineText text={heading.replace(/:$/, '')} />
+            </h3>
+          );
+        }
+
+        return (
+          <p key={`${line}-${index}`}>
+            <InlineText text={heading} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function App() {
+  const [files, setFiles] = useState([]);
+  const [studySet, setStudySet] = useState(null);
+  const [mode, setMode] = useState('answer');
+  const [page, setPage] = useState('dashboard');
+  const [message, setMessage] = useState('');
+  const [chat, setChat] = useState([]);
+  const [flashcards, setFlashcards] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [revealedCards, setRevealedCards] = useState({});
+  const [dragActive, setDragActive] = useState(false);
+  const [voicePersona, setVoicePersona] = useState('peer');
+  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'light');
+  const [auth, setAuth] = useState({ status: 'loading', user: null });
+  const [authMode, setAuthMode] = useState('login');
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [authError, setAuthError] = useState('');
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [speakingId, setSpeakingId] = useState(null);
+  const [conversationMode, setConversationMode] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState('Ready');
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const audioRef = useRef(null);
+  const speechControllerRef = useRef(null);
+  const speechUrlRef = useRef('');
+  const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const buddyActiveRef = useRef(false);
+  const speechItemRef = useRef('');
+  const busyRef = useRef('');
+  const tutorSpeakingRef = useRef(false);
+  const pauseRecognitionRef = useRef(false);
+  const restartTimerRef = useRef(null);
+  const lastTutorSpeechRef = useRef('');
+
+  const fileNames = useMemo(() => studySet?.files?.map((file) => file.originalName).join(', '), [studySet]);
+  const activePage = pages.find((item) => item.id === page) ?? pages[0];
+  const visibleChat = useMemo(() => {
+    if (!modes.some((item) => item.id === page)) return [];
+    return chat.filter((item) => item.mode === page || (page === 'answer' && !item.mode));
+  }, [chat, page]);
+  const progress = useMemo(() => {
+    const answers = chat.filter((item) => item.role === 'assistant').length;
+    const questions = chat.filter((item) => item.role === 'user').length;
+    return { answers, questions, cards: flashcards.length };
+  }, [chat, flashcards.length]);
+  const topicHeatmap = useMemo(() => {
+    const corpus = chat.map((item) => item.text).join(' ').toLowerCase();
+    return topicKeywords.map((item) => {
+      const mentions = item.terms.reduce((count, term) => count + (corpus.match(new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'g'))?.length || 0), 0);
+      const testMentions = chat
+        .filter((entry) => entry.mode === 'test')
+        .map((entry) => entry.text.toLowerCase())
+        .join(' ');
+      const weakSignals = item.terms.reduce((count, term) => count + (testMentions.match(new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'g'))?.length || 0), 0);
+      const strength = Math.max(8, Math.min(96, mentions * 16 - weakSignals * 5 + (flashcards.length ? 10 : 0)));
+      return { ...item, mentions, strength };
+    });
+  }, [chat, flashcards.length]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/auth/me`, { credent

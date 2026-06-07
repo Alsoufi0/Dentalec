@@ -1,0 +1,192 @@
+  <div className="heatmap-grid">
+                    {topicHeatmap.map((topic) => (
+                      <div key={topic.topic} className="topic-meter">
+                        <div>
+                          <strong>{topic.topic}</strong>
+                          <span>{topic.mentions ? `${topic.mentions} study signals` : 'Not studied yet'}</span>
+                        </div>
+                        <meter min="0" max="100" value={topic.strength}></meter>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="dashboard-grid">
+                  {modes.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button type="button" key={item.id} onClick={() => navigate(item.id)}>
+                        <Icon size={20} />
+                        <strong>{item.label}</strong>
+                        <span>{item.prompt}</span>
+                      </button>
+                    );
+                  })}
+                  <button type="button" onClick={() => navigate('kit')}>
+                    <Library size={20} />
+                    <strong>Study Kit</strong>
+                    <span>Review notes, flashcards, and export material.</span>
+                  </button>
+                </div>
+              </section>
+            ) : page === 'library' ? (
+              <section className="library-page">
+                <form className="upload-zone library-upload" onSubmit={uploadPdfs}>
+                  <Upload size={22} />
+                  <label htmlFor="pdfs">Upload dental PDFs</label>
+                  <input
+                    id="pdfs"
+                    type="file"
+                    accept="application/pdf"
+                    multiple
+                    onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                  />
+                  <button type="submit" disabled={!files.length || busy === 'upload'}>
+                    {busy === 'upload' ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                    Index PDFs
+                  </button>
+                </form>
+                <div className="kit-section">
+                  <div className="section-title">
+                    <Library size={18} />
+                    <h3>Indexed Material</h3>
+                  </div>
+                  {studySet ? (
+                    <div className="file-list">
+                      {studySet.files.map((file) => (
+                        <div key={file.fileId}>
+                          <FileText size={17} />
+                          <span>{file.originalName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">Upload PDFs to create a study set.</p>
+                  )}
+                </div>
+              </section>
+            ) : page === 'kit' ? (
+              <section className="kit-page">
+                <div className="kit-toolbar">
+                  <button type="button" onClick={() => createArtifact('notes')} disabled={!studySet || !!busy}>
+                    <FileText size={17} />
+                    Make notes
+                  </button>
+                  <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
+                    <BookmarkPlus size={17} />
+                    Make cards
+                  </button>
+                  <button type="button" onClick={() => createArtifact('weakQuiz')} disabled={!studySet || !!busy}>
+                    <FileQuestion size={17} />
+                    Weak quiz
+                  </button>
+                  <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>
+                    <ClipboardList size={17} />
+                    Case
+                  </button>
+                  <button type="button" onClick={() => createArtifact('mnemonics')} disabled={!studySet || !!busy}>
+                    <Brain size={17} />
+                    Mnemonics
+                  </button>
+                  <button type="button" onClick={exportMarkdown} disabled={!chat.length && !notes && !flashcards.length}>
+                    <Download size={17} />
+                    Markdown
+                  </button>
+                  <button type="button" onClick={exportAnki} disabled={!flashcards.length}>
+                    <Download size={17} />
+                    Anki TSV
+                  </button>
+                  <button type="button" className="danger-action" onClick={clearSession}>
+                    Clear
+                  </button>
+                </div>
+                <div className="kit-section">
+                  <div className="section-title">
+                    <FileText size={18} />
+                    <h3>Study Notes</h3>
+                  </div>
+                  {notes ? <ResponseContent text={notes} mode="summary" /> : <p className="muted">No notes yet. Generate notes from the Study Kit or quick actions.</p>}
+                </div>
+
+                <div className="kit-section">
+                  <div className="section-title">
+                    <BookmarkPlus size={18} />
+                    <h3>Flashcards</h3>
+                  </div>
+                  {flashcards.length ? (
+                    <div className="flashcard-grid">
+                      {flashcards.map((card, index) => (
+                        <article className="flashcard" key={card.id}>
+                          <span>Card {index + 1}</span>
+                          <h4>{card.question}</h4>
+                          {revealedCards[card.id] && <p>{card.answer}</p>}
+                          <div className="card-actions">
+                            <button type="button" onClick={() => toggleCard(card.id)}>
+                              {revealedCards[card.id] ? 'Hide answer' : 'Show answer'}
+                            </button>
+                            <button type="button" onClick={() => removeCard(card.id)}>Remove</button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No flashcards yet. Use Make cards or the Cards button under a tutor answer.</p>
+                  )}
+                </div>
+              </section>
+            ) : visibleChat.length === 0 ? (
+              <div className="empty-state">
+                <ActivePageIcon size={30} />
+                <h3>{studySet ? `Start the ${activePage.label} page.` : 'Upload a textbook, lecture PDF, or dental anatomy handout.'}</h3>
+              </div>
+            ) : null}
+            {modes.some((modeItem) => modeItem.id === page) && visibleChat.map((item) => (
+              <article key={item.id} className={`message ${item.role}`}>
+                {item.role === 'assistant' ? <ResponseContent text={item.text} mode={item.mode} /> : <p>{item.text}</p>}
+                {item.role === 'assistant' && (
+                  <div className="message-actions">
+                    <button type="button" className="listen" onClick={() => speak(item)}>
+                      {speakingId === item.id ? <Pause size={16} /> : <Volume2 size={16} />}
+                      {speakingId === item.id ? 'Stop' : 'Listen'}
+                    </button>
+                    <button type="button" className="listen" onClick={() => createArtifact('flashcards', item.text)} disabled={!!busy}>
+                      <BookmarkPlus size={16} />
+                      Cards
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))}
+            {busy === 'study' && (
+              <article className="message assistant loading">
+                <Loader2 className="spin" size={18} />
+                Studying the PDF
+              </article>
+            )}
+            {busy === 'voice' && (
+              <article className="message assistant loading">
+                <Loader2 className="spin" size={18} />
+                Transcribing your voice
+              </article>
+            )}
+            {busy === 'artifact' && (
+              <article className="message assistant loading">
+                <Loader2 className="spin" size={18} />
+                Building your study kit
+              </article>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {error && <div className="error">{error}</div>}
+
+          <form
+            className="composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitStudy();
+            }}
+          >
+            <button
+              type="button"
+              className={recording ? 'recording icon-button' : 'icon-button'}
+              onClick={conversationMode ? () => setConversationMode(false) : recording ? stopRecording : startRecording}

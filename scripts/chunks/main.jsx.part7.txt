@@ -1,0 +1,33 @@
+              disabled={!studySet || (!!busy && busy !== 'voice') || busy === 'voice'}
+              title={conversationMode ? 'Stop study buddy' : recording ? 'Stop recording' : 'Record question'}
+            >
+              {conversationMode ? <Square size={20} /> : recording ? <Pause size={20} /> : <Mic size={20} />}
+            </button>
+            <textarea
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder={
+                mode === 'test'
+                  ? 'Answer a quiz question, ask for a harder case, or say "test me on caries"...'
+                  : 'Ask about caries, mental foramen landmarks, enamel formation, cavity classes...'
+              }
+              rows={2}
+              disabled={!studySet}
+            />
+            <button type="submit" className="icon-button send" disabled={!studySet || !message.trim() || !!busy}>
+              {busy ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
+            </button>
+          </form>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+createRoot(document.getElementById('root')).render(<App />);

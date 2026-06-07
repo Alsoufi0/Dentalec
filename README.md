@@ -10,6 +10,7 @@ A local full-stack prototype for dental students to upload PDFs, study from the 
 - OpenAI `gpt-4.1` for grounded tutoring answers
 - OpenAI `gpt-4o-mini-transcribe` for speech-to-text
 - OpenAI `gpt-4o-mini-tts` for text-to-speech
+- Optional Postgres persistence for production users and login sessions
 
 ## Why OpenAI Instead of Gemini
 
@@ -30,6 +31,9 @@ copy .env.example .env
 ```bash
 OPENAI_API_KEY=sk-your-key-here
 PORT=8787
+OPENAI_MODEL=gpt-4.1-mini
+MAX_UPLOAD_MB=30
+DAILY_AI_BUDGET=120
 ```
 
 3. Install dependencies:
@@ -133,6 +137,8 @@ The hosted app supports basic email/password accounts.
 - Explain: concept explanation with clinical relevance
 - Test: creative oral-exam coaching with recall, vignettes, compare/contrast, anatomy landmarks, error-spotting, and harder challenge questions
 - Q&A: direct grounded answers from uploaded PDFs
+- Mastery: spaced review, readiness, confidence signals, weak-spot rescue plans, and curriculum tracks
+- Clinic Lab: professor and clinic workflow prototypes for OSCE stations, observation checklists, and adaptive remediation
 
 ## Conversation Mode
 
@@ -149,9 +155,11 @@ Study buddy mode is enabled from the left panel after a PDF is indexed. In Chrom
 ## Student Features
 
 - Private accounts with saved study sessions across devices
+- Daily AI usage budget display and backend enforcement
 - Persistent dark/light mode toggle
 - Study progress counters for questions, answers, and flashcards
 - Dashboard drag-and-drop upload for starting a study set immediately
+- Pasted text-source indexing for lecture notes, rubrics, protocols, and handouts
 - Animated Study Buddy voice status so students can see when it is listening
 - Voice personas: Supportive Peer, Stern Professor, and Clinical Mentor
 - Hands-free commands such as "Hey Tutor, summarize", "Hey Tutor, start a case study", and "Hey Tutor, make mnemonics"
@@ -163,6 +171,29 @@ Study buddy mode is enabled from the left panel after a PDF is indexed. In Chrom
 - Mnemonics generation for difficult dental facts
 - Markdown export for notes and conversation history
 - Anki-compatible TSV export for flashcards
+
+## Production Hardening
+
+The app can run locally with the JSON file store, but production should use Postgres:
+
+```bash
+DATABASE_URL=postgres://...
+PGSSLMODE=require
+```
+
+When `DATABASE_URL` is present, the server creates the `users` and `auth_sessions` tables automatically. The reference schema is in `db/schema.sql`.
+
+Recommended production controls:
+
+- Set `ALLOWED_ORIGINS` to the deployed HTTPS origin.
+- Set `DAILY_AI_BUDGET` for per-user AI-call budget control.
+- Set `MAX_UPLOAD_MB` to control PDF upload size.
+- Keep `OPENAI_API_KEY` only in Render environment variables, never in Git.
+- Move from the starter budget model to paid plans before public launch.
+
+## Product Direction
+
+See `PRODUCT_STRATEGY.md` for the broader path: student mastery first, professor OSCE and analytics next, then clinic observation and evidence-capture workflows with strict safety boundaries.
 
 ## Notes
 

@@ -1,0 +1,283 @@
+q = block.match(/Q:\s*(.+)/i)?.[1]?.trim();
+      const a = block.match(/A:\s*([\s\S]+)/i)?.[1]?.trim();
+      if (q && a) {
+        cards.push({ id: crypto.randomUUID(), question: stripMarkdown(q), answer: stripMarkdown(a) });
+      }
+    }
+    return cards;
+  }
+
+  function downloadFile(filename, content, type = 'text/markdown') {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportMarkdown() {
+    const body = [
+      '# Simav Dental Tutor Session',
+      '',
+      `PDFs: ${fileNames || 'No active PDF'}`,
+      '',
+      '## Notes',
+      notes || 'No saved notes yet.',
+      '',
+      '## Flashcards',
+      ...flashcards.map((card, index) => `${index + 1}. Q: ${card.question}\n   A: ${card.answer}`),
+      '',
+      '## Conversation',
+      ...chat.map((item) => `### ${item.role === 'assistant' ? 'Tutor' : 'Student'}\n${stripMarkdown(item.text)}`)
+    ].join('\n');
+    downloadFile('simav-dental-study-session.md', body);
+  }
+
+  function exportAnki() {
+    const rows = flashcards.map((card) => `${card.question.replace(/\t/g, ' ')}\t${card.answer.replace(/\t/g, ' ')}`);
+    downloadFile('dental-flashcards.tsv', rows.join('\n'), 'text/tab-separated-values');
+  }
+
+  async function clearSession() {
+    stopSpeech(false);
+    stopStudyBuddy();
+    setStudySet(null);
+    setChat([]);
+    setFlashcards([]);
+    setNotes('');
+    setFiles([]);
+    setMessage('');
+    setError('');
+    setRevealedCards({});
+    setPage('dashboard');
+    setMode('answer');
+    if (auth.user?.id) {
+      localStorage.removeItem(stateKeyForUser(auth.user.id));
+      await fetch(`${API_BASE}/session`, { method: 'DELETE', credentials: 'include' }).catch(() => {});
+    }
+  }
+
+  function toggleCard(cardId) {
+    setRevealedCards((items) => ({ ...items, [cardId]: !items[cardId] }));
+  }
+
+  function removeCard(cardId) {
+    setFlashcards((items) => items.filter((card) => card.id !== cardId));
+  }
+
+  async function uploadSelectedPdfs(selectedFiles) {
+    const pdfs = Array.from(selectedFiles || []).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+    if (!pdfs.length) {
+      setError('Please choose at least one PDF file.');
+      return;
+    }
+
+    busyRef.current = 'upload';
+    setBusy('upload');
+    setError('');
+    const body = new FormData();
+    pdfs.forEach((file) => body.append('pdfs', file));
+
+    try {
+      const response = await fetch(`${API_BASE}/upload`, { method: 'POST', body, credentials: 'include' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'PDF upload failed');
+      setStudySet(data);
+      setPage('dashboard');
+      setMode('answer');
+      setChat([
+        {
+          role: 'assistant',
+          text: 'Your PDF set is indexed. You can ask a question, request a summary, or switch to Test mode for an oral exam.',
+          mode: 'answer',
+          id: crypto.randomUUID()
+        }
+      ]);
+      setVoiceStatus('PDF ready');
+    } catch (uploadError) {
+      setError(uploadError.message);
+    } finally {
+      busyRef.current = '';
+      setBusy('');
+      setDragActive(false);
+    }
+  }
+
+  function handleDashboardDrop(event) {
+    event.preventDefault();
+    setDragActive(false);
+    uploadSelectedPdfs(event.dataTransfer.files);
+  }
+
+  async function createArtifact(type, source = '') {
+    if (!studySet?.vectorStoreId) return;
+
+    stopSpeech(false);
+    busyRef.current = 'artifact';
+    setBusy('artifact');
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/artifact`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vectorStoreId: studySet.vectorStoreId,
+          type,
+          source,
+          history: chat.slice(-8).map(({ role, text }) => ({ role, text })),
+          persona: voicePersona
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Artifact request failed');
+
+      if (type === 'flashcards') {
+        const cards = Array.isArray(data.cards)
+          ? data.cards
+              .filter((card) => card?.question && card?.answer)
+              .map((card) => ({ id: crypto.randomUUID(), question: stripMarkdown(card.question), answer: stripMarkdown(card.answer) }))
+          : parseFlashcards(data.text);
+        setFlashcards((items) => [...cards, ...items]);
+        setPage('kit');
+        setChat((items) => [
+          ...items,
+          {
+            role: 'assistant',
+            text: cards.length
+              ? `Created ${cards.length} flashcards and saved them in the Study Kit.`
+              : data.text,
+            mode: 'summary',
+            id: crypto.randomUUID()
+          }
+        ]);
+        return;
+      }
+
+      if (type === 'notes') {
+        setNotes(data.text);
+        setPage('kit');
+      }
+      if (type === 'mnemonics') {
+        setNotes(data.text);
+        setPage('kit');
+      }
+      if (type === 'weakQuiz' || type === 'caseStudy') {
+        setPage('test');
+        setMode('test');
+      }
+
+      setChat((items) => [...items, { role: 'assistant', text: data.text, mode: type === 'weakQuiz' || type === 'caseStudy' ? 'test' : 'summary', id: crypto.randomUUID() }]);
+    } catch (artifactError) {
+      setError(artifactError.message);
+    } finally {
+      busyRef.current = '';
+      setBusy('');
+    }
+  }
+
+  async function uploadPdfs(event) {
+    event.preventDefault();
+    uploadSelectedPdfs(files);
+  }
+
+  async function submitStudy(customMessage = message, options = {}) {
+    const trimmed = customMessage.trim();
+    if (!studySet?.vectorStoreId || !trimmed) return;
+
+    stopSpeech(false);
+    busyRef.current = 'study';
+    setBusy('study');
+    setError('');
+    setMessage('');
+    const userItem = { role: 'user', text: trimmed, mode, id: crypto.randomUUID() };
+    const history = chat.slice(-8).map(({ role, text }) => ({ role, text }));
+    setChat((items) => [...items, userItem]);
+
+    try {
+      const response = await fetch(`${API_BASE}/study`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vectorStoreId: studySet.vectorStoreId,
+          message: trimmed,
+          mode,
+          history,
+          persona: voicePersona
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Study request failed');
+      const assistantItem = { role: 'assistant', text: data.text, mode, id: crypto.randomUUID() };
+      setChat((items) => [...items, assistantItem]);
+      if (conversationMode || options.speak) {
+        await speak(assistantItem, { force: true });
+      }
+    } catch (studyError) {
+      setError(studyError.message);
+    } finally {
+      busyRef.current = '';
+      setBusy('');
+    }
+  }
+
+  async function startRecording() {
+    setError('');
+    stopSpeech(false);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      chunksRef.current = [];
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        if (!chunksRef.current.length) return;
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        await transcribe(blob);
+      };
+
+      recorder.start();
+      setRecording(true);
+      setVoiceStatus('Listening');
+    } catch (recordError) {
+      setError(recordError.message || 'Microphone permission was not available.');
+      setVoiceStatus('Mic blocked');
+    }
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    setRecording(false);
+    setVoiceStatus('Thinking');
+  }
+
+  async function transcribe(blob) {
+    busyRef.current = 'voice';
+    setBusy('voice');
+    const body = new FormData();
+    body.append('audio', blob, 'student-question.webm');
+
+    try {
+      const response = await fetch(`${API_BASE}/transcribe`, { method: 'POST', body, credentials: 'include' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Transcription failed');
+      if (!data.text?.trim()) {
+        setVoiceStatus('Ready');
+        return;
+      }
+      if (isStopPhrase(data.text)) {
+        stopSpeech();
+        setChat((items) => [
+          ...items,
+          { role: 'user', text: data.text, mode, id: crypto.random

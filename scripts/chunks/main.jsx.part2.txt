@@ -1,0 +1,297 @@
+ials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Not signed in');
+        return response.json();
+      })
+      .then((data) => setAuth({ status: 'authenticated', user: data.user }))
+      .catch(() => setAuth({ status: 'guest', user: null }));
+  }, []);
+
+  function applyStudyState(saved = {}) {
+    setStudySet(saved.studySet || null);
+    setChat(Array.isArray(saved.chat) ? saved.chat : []);
+    setFlashcards(Array.isArray(saved.flashcards) ? saved.flashcards : []);
+    setNotes(typeof saved.notes === 'string' ? saved.notes : '');
+    setVoicePersona(saved.voicePersona || 'peer');
+    setPage(saved.page || 'dashboard');
+    setMode(modes.some((item) => item.id === saved.page) ? saved.page : 'answer');
+  }
+
+  useEffect(() => {
+    if (!auth.user?.id) return;
+    let cancelled = false;
+
+    async function loadSession() {
+      setSessionLoaded(false);
+      try {
+        const response = await fetch(`${API_BASE}/session`, { credentials: 'include' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load your study session.');
+        const localState = JSON.parse(localStorage.getItem(stateKeyForUser(auth.user.id)) || '{}');
+        if (!cancelled) {
+          applyStudyState(data.studyState || localState);
+          setSessionLoaded(true);
+        }
+      } catch (sessionError) {
+        if (!cancelled) {
+          setError(sessionError.message);
+          setSessionLoaded(true);
+        }
+      }
+    }
+
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.user?.id]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !sessionLoaded) return;
+
+    const body = {
+      studySet,
+      chat,
+      flashcards,
+      notes,
+      page,
+      voicePersona
+    };
+    localStorage.setItem(stateKeyForUser(auth.user.id), JSON.stringify(body));
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`${API_BASE}/session`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      }).catch(() => {});
+    }, 700);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [auth.user?.id, sessionLoaded, studySet, chat, flashcards, notes, page, voicePersona]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chat, busy]);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => {
+    return () => {
+      stopSpeech(false);
+      stopStudyBuddy();
+      recorderRef.current?.stream?.getTracks?.().forEach((track) => track.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    buddyActiveRef.current = conversationMode;
+    if (conversationMode) {
+      startStudyBuddy();
+    } else {
+      stopStudyBuddy();
+    }
+  }, [conversationMode, studySet?.vectorStoreId]);
+
+  function stopSpeech(resumeBuddy = true) {
+    speechControllerRef.current?.abort();
+    speechControllerRef.current = null;
+    window.speechSynthesis?.cancel();
+    speechItemRef.current = '';
+    tutorSpeakingRef.current = false;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+
+    if (speechUrlRef.current) {
+      URL.revokeObjectURL(speechUrlRef.current);
+      speechUrlRef.current = '';
+    }
+
+    setSpeakingId(null);
+    pauseRecognitionRef.current = false;
+    if (resumeBuddy && conversationMode && studySet?.vectorStoreId && !busyRef.current) {
+      setVoiceStatus('Always listening');
+      restartTimerRef.current = window.setTimeout(() => startStudyBuddy(), 800);
+    } else {
+      setVoiceStatus(conversationMode ? 'Paused' : 'Ready');
+    }
+  }
+
+  function isStopPhrase(text) {
+    const normalized = text.toLowerCase().replace(/[^\w\s']/g, '').trim();
+    return stopPhrases.some((phrase) => normalized === phrase || normalized.includes(phrase));
+  }
+
+  function looksLikeTutorEcho(transcript) {
+    const spokenWords = new Set(
+      lastTutorSpeechRef.current
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((word) => word.length > 4)
+    );
+    const transcriptWords = transcript
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) => word.length > 4);
+
+    if (transcriptWords.length < 5 || !spokenWords.size) return false;
+    const overlap = transcriptWords.filter((word) => spokenWords.has(word)).length / transcriptWords.length;
+    return overlap > 0.58;
+  }
+
+  function getRecognitionConstructor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition;
+  }
+
+  function startStudyBuddy() {
+    if (!studySet?.vectorStoreId || recognitionRef.current || tutorSpeakingRef.current || busyRef.current) return;
+
+    const Recognition = getRecognitionConstructor();
+    if (!Recognition) {
+      setVoiceStatus('Use mic button');
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setRecording(true);
+      setVoiceStatus('Always listening');
+    };
+
+    recognition.onresult = async (event) => {
+      if (tutorSpeakingRef.current || speechItemRef.current) return;
+      const result = event.results[event.results.length - 1];
+      const transcript = result?.[0]?.transcript?.trim();
+      if (!transcript) return;
+      if (looksLikeTutorEcho(transcript)) return;
+
+      if (isStopPhrase(transcript)) {
+        stopSpeech();
+        setVoiceStatus('Listening');
+        return;
+      }
+
+      if (busyRef.current) return;
+      if (handleVoiceCommand(transcript)) return;
+      await submitStudy(transcript, { speak: true, fromBuddy: true });
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'not-allowed') {
+        setVoiceStatus('Mic blocked');
+        setConversationMode(false);
+      }
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (pauseRecognitionRef.current) {
+        return;
+      }
+      if (buddyActiveRef.current && studySet?.vectorStoreId && !tutorSpeakingRef.current && !busyRef.current) {
+        restartTimerRef.current = window.setTimeout(() => startStudyBuddy(), 450);
+      } else {
+        setRecording(false);
+        setVoiceStatus('Ready');
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
+
+  function stopStudyBuddy() {
+    buddyActiveRef.current = false;
+    pauseRecognitionRef.current = false;
+    window.clearTimeout(restartTimerRef.current);
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setRecording(false);
+    if (!speakingId) setVoiceStatus('Ready');
+  }
+
+  function pauseStudyBuddyForTutor() {
+    pauseRecognitionRef.current = true;
+    window.clearTimeout(restartTimerRef.current);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setRecording(false);
+  }
+
+  function resumeStudyBuddyAfterTutor() {
+    tutorSpeakingRef.current = false;
+    pauseRecognitionRef.current = false;
+    setSpeakingId(null);
+    if (conversationMode && studySet?.vectorStoreId) {
+      setVoiceStatus('Always listening');
+      restartTimerRef.current = window.setTimeout(() => startStudyBuddy(), 800);
+    } else {
+      setVoiceStatus('Ready');
+    }
+  }
+
+  function navigate(nextPage) {
+    stopSpeech(false);
+    setPage(nextPage);
+    if (modes.some((item) => item.id === nextPage)) setMode(nextPage);
+    setError('');
+  }
+
+  function handleVoiceCommand(transcript) {
+    const normalized = transcript.toLowerCase();
+    if (!normalized.includes('tutor') && !normalized.startsWith('summarize') && !normalized.startsWith('start')) {
+      return false;
+    }
+
+    if (normalized.includes('open library') || normalized.includes('go to library')) {
+      navigate('library');
+      return true;
+    }
+    if (normalized.includes('study kit') || normalized.includes('flashcards')) {
+      navigate('kit');
+      return true;
+    }
+    if (normalized.includes('summarize')) {
+      navigate('summary');
+      submitStudy('Summarize this PDF for a dental exam.', { speak: true });
+      return true;
+    }
+    if (normalized.includes('case study') || normalized.includes('vignette')) {
+      createArtifact('caseStudy');
+      return true;
+    }
+    if (normalized.includes('mnemonic')) {
+      createArtifact('mnemonics');
+      return true;
+    }
+    if (normalized.includes('quiz') || normalized.includes('test me')) {
+      navigate('test');
+      submitStudy('Start a 5-minute oral quiz on the highest-yield material in this PDF.', { speak: true });
+      return true;
+    }
+    return false;
+  }
+
+  function parseFlashcards(text) {
+    const cards = [];
+    const blocks = text.split(/\n\s*\n/);
+    for (const block of blocks) {
+      const 

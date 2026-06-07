@@ -1,0 +1,215 @@
+urrent set</span>
+              <strong>{studySet.files.length} PDF{studySet.files.length > 1 ? 's' : ''}</strong>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className={conversationMode ? 'voice-card active' : 'voice-card'}
+            onClick={() => setConversationMode((value) => !value)}
+            disabled={!studySet}
+          >
+            <Headphones size={19} />
+            <span className="voice-orb" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            <span>
+              <strong>Study buddy</strong>
+              <small>{conversationMode ? 'Always listening' : 'Tap to activate'}</small>
+            </span>
+            <em>{voiceStatus}</em>
+          </button>
+
+          <div className="persona-control">
+            <label htmlFor="persona">Voice persona</label>
+            <select id="persona" value={voicePersona} onChange={(event) => setVoicePersona(event.target.value)}>
+              {voicePersonas.map((persona) => (
+                <option key={persona.id} value={persona.id}>
+                  {persona.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <nav className="mode-group" aria-label="Study pages">
+            {pages.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  className={page === item.id ? 'active' : ''}
+                  type="button"
+                  onClick={() => navigate(item.id)}
+                  title={item.label}
+                >
+                  <Icon size={18} />
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.hint}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="tooth-visual" aria-hidden="true">
+            <div className="crown"></div>
+            <div className="root root-left"></div>
+            <div className="root root-right"></div>
+            <span className="nerve"></span>
+          </div>
+        </aside>
+
+        <section className="chat-panel">
+          <div className="chat-header">
+            <div>
+              <p>{activePage?.label.toUpperCase()}</p>
+              <h2>{studySet ? fileNames : 'Waiting for a PDF'}</h2>
+            </div>
+            <div className="header-actions">
+              {speakingId && (
+                <button type="button" className="stop-button" onClick={stopSpeech}>
+                  <Square size={16} />
+                  Stop
+                </button>
+              )}
+              <button
+                type="button"
+                className="ghost-button theme-toggle"
+                onClick={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+                title="Toggle dark mode"
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                {theme === 'dark' ? 'Light' : 'Dark'}
+              </button>
+              <button type="button" className="ghost-button" onClick={quickPrompt} disabled={!studySet}>
+                <Sparkles size={18} />
+                Prompt
+              </button>
+              <button type="button" className="ghost-button" onClick={logout}>
+                Sign out
+              </button>
+            </div>
+          </div>
+
+          <section className="page-intro">
+            <div className="page-icon">
+              <ActivePageIcon size={20} />
+            </div>
+            <div>
+              <h2>{activePage.label}</h2>
+              <p>{activePage.prompt}</p>
+            </div>
+          </section>
+
+          <div className="quick-actions">
+            {modes.some((item) => item.id === page) && (
+              <button type="button" onClick={() => submitStudy(activePage.prompt, { speak: conversationMode })} disabled={!studySet || !!busy}>
+                Start {activePage.label}
+              </button>
+            )}
+            <button type="button" onClick={() => navigate('library')}>
+              Library
+            </button>
+            <button type="button" onClick={() => submitStudy('Summarize this PDF for a dental exam.', { speak: conversationMode })} disabled={!studySet || !!busy}>
+              Summarize PDF
+            </button>
+            <button type="button" onClick={() => submitStudy('Explain dental caries from this PDF in a clear study-friendly way.', { speak: conversationMode })} disabled={!studySet || !!busy}>
+              Explain caries
+            </button>
+            <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
+              Make flashcards
+            </button>
+            <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>
+              Case study
+            </button>
+            <button type="button" onClick={() => createArtifact('mnemonics')} disabled={!studySet || !!busy}>
+              Mnemonics
+            </button>
+            <button type="button" onClick={() => submitStudy('Start a creative oral exam from this PDF. Ask useful questions and include answer rubrics.', { speak: conversationMode })} disabled={!studySet || !!busy}>
+              Start oral test
+            </button>
+          </div>
+
+          <div className="messages">
+            {page === 'dashboard' ? (
+              <section className="dashboard-page">
+                <div className="dashboard-hero">
+                  <div>
+                    <p>Current Study Set</p>
+                    <h3>{studySet ? fileNames : 'No PDFs indexed yet'}</h3>
+                  </div>
+                  <button type="button" onClick={() => navigate(studySet ? 'answer' : 'library')}>
+                    {studySet ? 'Continue studying' : 'Open library'}
+                  </button>
+                </div>
+                <div className="kit-section start-guide">
+                  <div className="section-title">
+                    <Sparkles size={18} />
+                    <h3>Start Here</h3>
+                  </div>
+                  <div className="guide-list compact">
+                    <article>
+                      <strong>Upload</strong>
+                      <span>Add one or more dental PDFs in Library or drop them here.</span>
+                    </article>
+                    <article>
+                      <strong>Ask</strong>
+                      <span>Use Q&A for exact answers grounded in your uploaded material.</span>
+                    </article>
+                    <article>
+                      <strong>Study</strong>
+                      <span>Use Summary, Explain, Test, Case study, Mnemonics, and Flashcards.</span>
+                    </article>
+                    <article>
+                      <strong>Speak</strong>
+                      <span>Activate Study Buddy, choose a persona, and talk through the chapter.</span>
+                    </article>
+                  </div>
+                </div>
+                {!studySet && (
+                  <div
+                    className={dragActive ? 'dashboard-drop active' : 'dashboard-drop'}
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={handleDashboardDrop}
+                  >
+                    <Upload size={34} />
+                    <h3>Drop a dental PDF here</h3>
+                    <p>Upload a lecture, textbook chapter, handout, or review sheet and start studying immediately.</p>
+                    <label htmlFor="dashboard-pdfs">Choose PDFs</label>
+                    <input
+                      id="dashboard-pdfs"
+                      type="file"
+                      accept="application/pdf"
+                      multiple
+                      onChange={(event) => uploadSelectedPdfs(event.target.files)}
+                    />
+                  </div>
+                )}
+                <div className="progress-grid page-progress">
+                  <div>
+                    <strong>{progress.questions}</strong>
+                    <span>Questions asked</span>
+                  </div>
+                  <div>
+                    <strong>{progress.answers}</strong>
+                    <span>Tutor answers</span>
+                  </div>
+                  <div>
+                    <strong>{progress.cards}</strong>
+                    <span>Flashcards</span>
+                  </div>
+                </div>
+                <div className="kit-section">
+                  <div className="section-title">
+                    <CheckCircle2 size={18} />
+                    <h3>Topic Heatmap</h3>
+                  </div>
+                
