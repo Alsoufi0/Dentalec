@@ -37,6 +37,7 @@ import {
   Stethoscope,
   Sun,
   Timer,
+  Trash2,
   Upload,
   UserPlus,
   Volume2,
@@ -71,7 +72,7 @@ const pages = [
   ...modes,
   { id: 'mastery', label: 'Mastery', icon: CheckCircle2, hint: 'adaptive', prompt: 'Track readiness, spaced review, curriculum progress, and weak-spot remediation.' },
   { id: 'engines', label: 'Study Tools', icon: Brain, hint: 'from your notes', prompt: 'Turn your uploaded source into focused study outputs: gap checks, differentials, protocols, cases, visuals, mnemonics, and more.' },
-  { id: 'clinic', label: 'Clinic Lab', icon: ClipboardList, hint: 'future', prompt: 'Prototype professor and clinic workflows for observation, feedback, OSCEs, and clinical issue identification.' },
+  { id: 'clinic', label: 'Clinical Cases', icon: Stethoscope, hint: 'practice', prompt: 'Generate patient cases, OSCE stations, and exam checklists from your uploaded source.' },
   { id: 'cases', label: 'Case Library', icon: Layers, hint: 'x-ray cases', prompt: 'Browse and filter teaching radiographs, then open one in the viewer.' },
   { id: 'radiology', label: 'Radiology Viewer', icon: Activity, hint: 'viewer', prompt: 'Zoom, window, measure, and study annotated structures on an X-ray.' },
   { id: 'interpreter', label: 'X-ray Interpreter', icon: Sparkles, hint: 'AI feedback', prompt: 'Write your reading of a film and get instant AI feedback.' },
@@ -81,18 +82,16 @@ const pages = [
 const sidebarItems = [
   { page: 'dashboard', label: 'Home', icon: Home, hint: 'command' },
   { page: 'explanation', label: 'Study', icon: BookOpen, hint: 'learn' },
-  { page: 'mastery', label: 'Subjects', icon: Layers, hint: 'maps' },
-  { page: 'clinic', label: 'Cases', icon: Stethoscope, hint: 'simulator' },
+  { page: 'library', label: 'Notes & Books', icon: Library, hint: 'your sources' },
+  { page: 'answer', label: 'AI Tutor', icon: Brain, hint: 'ask anything' },
   { page: 'engines', label: 'Study Tools', icon: CircleHelp, hint: 'from notes' },
   { page: 'kit', label: 'Flashcards', icon: BookmarkPlus, hint: 'review' },
+  { page: 'clinic', label: 'Clinical Cases', icon: Stethoscope, hint: 'practice' },
+  { page: 'test', label: 'Exams', icon: FileQuestion, hint: 'oral practice' },
   { page: 'cases', label: 'Radiology', icon: Activity, hint: 'x-ray cases' },
   { page: 'interpreter', label: 'X-ray Interpreter', icon: ScanSearch, hint: 'AI feedback' },
-  { page: 'library', label: 'Notes & Books', icon: Library, hint: 'sources' },
-  { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'analytics' },
-  { page: 'test', label: 'Exams', icon: FileQuestion, hint: 'practice' },
-  { page: 'answer', label: 'AI Tutor', icon: Brain, hint: 'professor' },
-  { page: 'summary', label: 'Summary', icon: FileText, hint: 'recaps' },
-  { page: 'clinic', label: 'Clinic Lab', icon: ClipboardList, hint: 'studio' }
+  { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'mastery maps' },
+  { page: 'summary', label: 'Summary', icon: FileText, hint: 'recaps' }
 ];
 
 const stopPhrases = [
@@ -1535,6 +1534,26 @@ function App() {
     }
   }
 
+  async function deleteSource(fileId) {
+    if (!studySet?.vectorStoreId) return;
+    if (!window.confirm('Remove this source from your study set?')) return;
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/source/delete`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vectorStoreId: studySet.vectorStoreId, fileId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not remove the source.');
+      setStudySet(data.studySet);
+      if (!data.studySet) setPage('library');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   function toggleCard(cardId) {
     setRevealedCards((items) => ({ ...items, [cardId]: !items[cardId] }));
   }
@@ -2380,6 +2399,9 @@ function App() {
                           <span className={file.sourceType === 'text' ? 'file-badge text' : 'file-badge pdf'}>
                             {file.sourceType === 'text' ? 'Text' : 'PDF'}
                           </span>
+                          <button type="button" className="file-del" onClick={() => deleteSource(file.fileId)} title="Remove this source" aria-label="Remove this source">
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -2534,95 +2556,77 @@ function App() {
               <section className="clinic-page">
                 <div className="clinic-hero">
                   <div>
-                    <p>Future Product Line</p>
-                    <h3>Student tutor today. Professor and clinic intelligence tomorrow.</h3>
-                    <span>Design the system around observable findings, educational feedback, evidence capture, and safe escalation rather than unsupported diagnosis.</span>
+                    <p>Clinical cases</p>
+                    <h3>Practice with patient scenarios built from your notes.</h3>
+                    <span>Generate a case to reason through, an OSCE station to rehearse, or a checklist to structure your exam. Each one is grounded in the source you uploaded.</span>
                   </div>
                 </div>
+                {!studySet && (
+                  <div className="engines-need-source">
+                    <span>Add a study source first so these can be built from your material.</span>
+                    <button type="button" onClick={() => navigate('library')}>Add a source</button>
+                  </div>
+                )}
                 <div className="clinic-grid">
                   <article>
+                    <span className="clinic-ic"><Stethoscope size={22} /></span>
+                    <strong>Clinical case</strong>
+                    <span>A step-by-step patient scenario with history, findings, and decisions to reason through.</span>
+                    <small className="produces">Produces: interactive case</small>
+                    <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>Generate case</button>
+                  </article>
+                  <article>
                     <span className="clinic-ic"><ClipboardList size={22} /></span>
-                    <strong>Professor OSCE Builder</strong>
-                    <span>Create stations, patient scripts, examiner prompts, rubrics, and remediation loops from course material.</span>
-                    <small className="produces">Produces: OSCE station + rubric</small>
+                    <strong>OSCE station</strong>
+                    <span>An exam-style station with a patient script, tasks, and a marking rubric to rehearse against.</span>
+                    <small className="produces">Produces: OSCE + rubric</small>
                     <button type="button" onClick={() => createArtifact('osce')} disabled={!studySet || !!busy}>Generate OSCE</button>
                   </article>
                   <article>
                     <span className="clinic-ic"><CheckCircle2 size={22} /></span>
-                    <strong>Clinical Observation Checklist</strong>
-                    <span>Turn topics into observable signs, evidence requirements, red flags, and teaching feedback.</span>
-                    <small className="produces">Produces: observation checklist</small>
+                    <strong>Exam checklist</strong>
+                    <span>Turn a topic into observable signs, red flags, and a structured way to present your findings.</span>
+                    <small className="produces">Produces: checklist</small>
                     <button type="button" onClick={() => createArtifact('clinicalVisionChecklist')} disabled={!studySet || !!busy}>Build checklist</button>
                   </article>
                   <article>
                     <span className="clinic-ic"><Brain size={22} /></span>
-                    <strong>Adaptive Remediation</strong>
-                    <span>Convert weak answers into targeted drills, confidence checks, and spaced review plans.</span>
-                    <small className="produces">Produces: rescue study plan</small>
+                    <strong>Rescue plan</strong>
+                    <span>Turn your weak spots into targeted drills, confidence checks, and a spaced review plan.</span>
+                    <small className="produces">Produces: study plan</small>
                     <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>Create plan</button>
                   </article>
-                  <article>
-                    <span className="clinic-ic"><GraduationCap size={22} /></span>
-                    <strong>Professor Studio</strong>
-                    <span>Generate objectives, rubrics, OSCE stations, weak-concept maps, and remediation activities.</span>
-                    <small className="produces">Produces: full teaching pack</small>
-                    <button type="button" onClick={() => createArtifact('professorStudio')} disabled={!studySet || !!busy}>Open studio</button>
-                  </article>
-                </div>
-                <div className="kit-section">
-                  <div className="section-title">
-                    <Sparkles size={18} />
-                    <h3>North Star</h3>
-                  </div>
-                  <p className="muted">Build a dentistry knowledge operating system: student mastery, professor assessment, and clinic observation tools that translate existing dental knowledge into repeatable, auditable workflows.</p>
                 </div>
               </section>
             ) : page === 'kit' ? (
               <section className="kit-page">
                 <div className="kit-toolbar">
-                  <button type="button" onClick={() => createArtifact('notes')} disabled={!studySet || !!busy}>
-                    <FileText size={17} />
-                    Make notes
-                  </button>
-                  <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
-                    <BookmarkPlus size={17} />
-                    Make cards
-                  </button>
-                  <button type="button" onClick={() => createArtifact('weakQuiz')} disabled={!studySet || !!busy}>
-                    <FileQuestion size={17} />
-                    Weak quiz
-                  </button>
-                  <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>
-                    <ClipboardList size={17} />
-                    Case
-                  </button>
-                  <button type="button" onClick={() => createArtifact('osce')} disabled={!studySet || !!busy}>
-                    <ClipboardList size={17} />
-                    OSCE
-                  </button>
-                  <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
-                    <CheckCircle2 size={17} />
-                    Rescue
-                  </button>
-                  <button type="button" onClick={() => createArtifact('curriculumMap')} disabled={!studySet || !!busy}>
-                    <Brain size={17} />
-                    Map
-                  </button>
-                  <button type="button" onClick={() => createArtifact('mnemonics')} disabled={!studySet || !!busy}>
-                    <Brain size={17} />
-                    Mnemonics
-                  </button>
-                  <button type="button" onClick={exportMarkdown} disabled={!chat.length && !notes && !flashcards.length}>
-                    <Download size={17} />
-                    Markdown
-                  </button>
-                  <button type="button" onClick={exportAnki} disabled={!flashcards.length}>
-                    <Download size={17} />
-                    Anki TSV
-                  </button>
-                  <button type="button" className="danger-action" onClick={clearSession}>
-                    Clear
-                  </button>
+                  <div className="kit-make">
+                    <button type="button" onClick={() => createArtifact('notes')} disabled={!studySet || !!busy}>
+                      <FileText size={17} />
+                      Make notes
+                    </button>
+                    <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
+                      <BookmarkPlus size={17} />
+                      Make cards
+                    </button>
+                    <button type="button" className="kit-link" onClick={() => navigate('engines')}>
+                      More study tools
+                    </button>
+                  </div>
+                  <div className="kit-export">
+                    <button type="button" onClick={exportMarkdown} disabled={!chat.length && !notes && !flashcards.length}>
+                      <Download size={16} />
+                      Markdown
+                    </button>
+                    <button type="button" onClick={exportAnki} disabled={!flashcards.length}>
+                      <Download size={16} />
+                      Anki
+                    </button>
+                    <button type="button" className="danger-action" onClick={clearSession}>
+                      Clear
+                    </button>
+                  </div>
                 </div>
                 <div className="kit-section">
                   <div className="section-title">

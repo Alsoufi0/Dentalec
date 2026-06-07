@@ -101,6 +101,22 @@
   letter-spacing: -0.015em;
 }
 
+/* per-source delete in the Library file list */
+:root[data-theme="dark"] .file-row { display: flex; align-items: center; gap: 10px; }
+:root[data-theme="dark"] .file-row .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-theme="dark"] .file-del {
+  flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--c-line, #232c3d); border-radius: 8px; background: transparent;
+  color: #ff9bab; cursor: pointer;
+}
+:root[data-theme="dark"] .file-del:hover { background: rgba(255, 107, 129, 0.16); border-color: rgba(255, 107, 129, 0.4); color: #fff; }
+
+/* slimmer Study Kit toolbar: make actions left, exports right */
+:root[data-theme="dark"] .kit-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+:root[data-theme="dark"] .kit-make, :root[data-theme="dark"] .kit-export { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+:root[data-theme="dark"] .kit-link { background: transparent !important; border: 0 !important; color: var(--c-accent, #36d6c3) !important; font-weight: 700; padding: 8px 6px !important; box-shadow: none !important; }
+:root[data-theme="dark"] .kit-export button { font-size: 0.8rem; }
+
 /* Study Tools (engines) page clarity */
 :root[data-theme="dark"] .engines-hero-bar small {
   display: block;

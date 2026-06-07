@@ -803,6 +803,36 @@ app.post(apiPaths('/api/upload'), requireAuth, rateLimit({ windowMs: 60 * 60 * 1
 
 app.post(apiPaths('/api/text-source'), requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 30, label: 'text-source' }), requireAiBudget, requireApiKey, indexTextSource);
 
+// Remove a single uploaded source (one PDF or pasted text) from the study set.
+// Deletes it from the OpenAI vector store + file store, keeps the server session
+// in sync, and tears down the empty vector store if it was the last source.
+app.post(apiPaths('/api/source/delete'), requireAuth, requireApiKey, async (req, res) => {
+  const { vectorStoreId, fileId } = req.body || {};
+  if (!vectorStoreId || !fileId) {
+    res.status(400).json({ error: 'vectorStoreId and fileId are required.' });
+    return;
+  }
+  try {
+    try { await openaiClient.vectorStores.files.del(vectorStoreId, fileId); } catch { /* already gone */ }
+    try { await openaiClient.files.del(fileId); } catch { /* already gone */ }
+
+    const state = req.user.studyState;
+    let studySet = state?.studySet || null;
+    if (studySet && studySet.vectorStoreId === vectorStoreId) {
+      studySet = { ...studySet, files: (studySet.files || []).filter((f) => f.fileId !== fileId) };
+      if (!studySet.files.length) {
+        try { await openaiClient.vectorStores.del(vectorStoreId); } catch { /* ignore */ }
+        studySet = null;
+      }
+      req.user.studyState = { ...(state || {}), studySet, updatedAt: new Date().toISOString() };
+      saveStore();
+    }
+    res.json({ studySet });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post(apiPaths('/api/study'), requireAuth, rateLimit({ windowMs: 60 * 1000, max: 18, label: 'study' }), requireAiBudget, requireApiKey, async (req, res) => {
   const { vectorStoreId, message, mode = 'answer', history = [], persona = 'peer' } = req.body;
   if (!vectorStoreId || !message) {
