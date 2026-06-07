@@ -100,6 +100,7 @@
 .rv-annlist button:hover { border-color: var(--rad-line-2); }
 .rv-annlist button.active { border-color: var(--rad-accent); background: rgba(54,214,195,0.1); }
 .rv-annlist button i { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+.rad-disclaimer { margin: 4px 0 0; padding: 9px 11px; border-radius: 9px; background: rgba(255, 206, 92, 0.08); border: 1px solid rgba(255, 206, 92, 0.22); color: #d8c089; font-size: 0.7rem; line-height: 1.45; }
 .rv-dicom { position: relative; width: 100%; height: 460px; }
 .rv-dicom-el { width: 100%; height: 100%; }
 .rv-empty { display: grid; place-items: center; min-height: 300px; color: var(--rad-muted); }

@@ -8,6 +8,7 @@ import {
   Brain,
   CalendarCheck,
   CheckCircle2,
+  ChevronRight,
   CircleHelp,
   ClipboardList,
   Compass,
@@ -69,7 +70,7 @@ const pages = [
   { id: 'library', label: 'Library', icon: Upload, hint: 'sources', prompt: 'Upload PDFs or index pasted dental notes, rubrics, protocols, and handouts.' },
   ...modes,
   { id: 'mastery', label: 'Mastery', icon: CheckCircle2, hint: 'adaptive', prompt: 'Track readiness, spaced review, curriculum progress, and weak-spot remediation.' },
-  { id: 'engines', label: 'Engines', icon: Brain, hint: 'DentalOS', prompt: 'Run specialized DentalOS engines for gaps, differentials, protocols, cases, visuals, memory, radiology, and professor workflows.' },
+  { id: 'engines', label: 'Study Tools', icon: Brain, hint: 'from your notes', prompt: 'Turn your uploaded source into focused study outputs: gap checks, differentials, protocols, cases, visuals, mnemonics, and more.' },
   { id: 'clinic', label: 'Clinic Lab', icon: ClipboardList, hint: 'future', prompt: 'Prototype professor and clinic workflows for observation, feedback, OSCEs, and clinical issue identification.' },
   { id: 'cases', label: 'Case Library', icon: Layers, hint: 'x-ray cases', prompt: 'Browse and filter teaching radiographs, then open one in the viewer.' },
   { id: 'radiology', label: 'Radiology Viewer', icon: Activity, hint: 'viewer', prompt: 'Zoom, window, measure, and study annotated structures on an X-ray.' },
@@ -82,7 +83,7 @@ const sidebarItems = [
   { page: 'explanation', label: 'Study', icon: BookOpen, hint: 'learn' },
   { page: 'mastery', label: 'Subjects', icon: Layers, hint: 'maps' },
   { page: 'clinic', label: 'Cases', icon: Stethoscope, hint: 'simulator' },
-  { page: 'engines', label: 'Questions', icon: CircleHelp, hint: 'engines' },
+  { page: 'engines', label: 'Study Tools', icon: CircleHelp, hint: 'from notes' },
   { page: 'kit', label: 'Flashcards', icon: BookmarkPlus, hint: 'review' },
   { page: 'cases', label: 'Radiology', icon: Activity, hint: 'x-ray cases' },
   { page: 'interpreter', label: 'X-ray Interpreter', icon: ScanSearch, hint: 'AI feedback' },
@@ -316,6 +317,74 @@ function ResponseTable({ lines }) {
   );
 }
 
+function lineIsHeading(line, mode) {
+  const heading = line.replace(/^#{1,6}\s*/, '');
+  const numbered = heading.match(/^(\d+)\.\s+(.*)/);
+  return (
+    /^#{1,6}\s/.test(line) ||
+    (/^[A-Z][^.!?]{2,48}:$/.test(heading) && !numbered) ||
+    (mode === 'test' && /question|answer|rubric|explanation|challenge|case|vignette/i.test(heading))
+  );
+}
+
+// Renders one parsed block (table, flow map, numbered/bullet row, heading, or
+// paragraph). Shared by the flat and the collapsible-section layouts.
+function RenderBlock({ block, mode }) {
+  if (block.type === 'table') return <ResponseTable lines={block.lines} />;
+
+  const line = block.line;
+  const heading = line.replace(/^#{1,6}\s*/, '');
+  const numbered = heading.match(/^(\d+)\.\s+(.*)/);
+  const bullet = heading.match(/^[-*]\s+(.*)/);
+
+  // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map.
+  const flowSource = bullet ? bullet[1] : numbered ? numbered[2] : heading;
+  const flowNodes = flowSource.split(/\s*(?:->|=>|→)\s*/).map((node) => node.trim()).filter(Boolean);
+  if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 220) {
+    return (
+      <div className="flow-map">
+        {flowNodes.map((node, nodeIndex) => (
+          <React.Fragment key={`${node}-${nodeIndex}`}>
+            <span className="flow-node"><InlineText text={node} /></span>
+            {nodeIndex < flowNodes.length - 1 && <span className="flow-arrow" aria-hidden="true">→</span>}
+          </React.Fragment>
+        ))}
+      </div>
+    );
+  }
+  if (numbered) {
+    return <div className="answer-row numbered"><span>{numbered[1]}</span><p><InlineText text={numbered[2]} /></p></div>;
+  }
+  if (bullet) {
+    return <div className="answer-row bullet"><span></span><p><InlineText text={bullet[1]} /></p></div>;
+  }
+  if (lineIsHeading(line, mode)) {
+    return <h3><InlineText text={heading.replace(/:$/, '')} /></h3>;
+  }
+  return <p><InlineText text={heading} /></p>;
+}
+
+// A collapsible section of an answer. Lets a student scan headings and open
+// only what they need instead of reading everything at once.
+function AnswerSection({ title, blocks, mode, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const preview = blocks.length;
+  return (
+    <section className={`answer-section${open ? ' open' : ''}`}>
+      <button type="button" className="answer-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <ChevronRight size={16} className="sec-caret" />
+        <span><InlineText text={title} /></span>
+        {!open && preview > 0 && <em className="sec-count">{preview}</em>}
+      </button>
+      {open && (
+        <div className="answer-section-body">
+          {blocks.map((block, index) => <RenderBlock key={index} block={block} mode={mode} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ResponseContent({ text, mode }) {
   const lines = text
     .split('\n')
@@ -334,75 +403,42 @@ function ResponseContent({ text, mode }) {
   if (!normalizedLines.length) return null;
 
   const blocks = buildContentBlocks(normalizedLines);
+  const wrapClass = mode === 'test' ? 'answer-content test-answer' : 'answer-content';
+
+  // Long, multi-section answers become collapsible sections so the student can
+  // scan and dive in, instead of facing a wall of text. Short answers and oral
+  // tests stay flat.
+  const headingCount = blocks.filter((b) => b.type === 'line' && lineIsHeading(b.line, mode)).length;
+  const useSections = mode !== 'test' && headingCount >= 2 && blocks.length > 12;
+
+  if (!useSections) {
+    return (
+      <div className={wrapClass}>
+        {blocks.map((block, index) => <RenderBlock key={index} block={block} mode={mode} />)}
+      </div>
+    );
+  }
+
+  const intro = [];
+  const sections = [];
+  let current = null;
+  for (const block of blocks) {
+    if (block.type === 'line' && lineIsHeading(block.line, mode)) {
+      current = { title: block.line.replace(/^#{1,6}\s*/, '').replace(/:$/, ''), blocks: [] };
+      sections.push(current);
+    } else if (current) {
+      current.blocks.push(block);
+    } else {
+      intro.push(block);
+    }
+  }
 
   return (
-    <div className={mode === 'test' ? 'answer-content test-answer' : 'answer-content'}>
-      {blocks.map((block, index) => {
-        if (block.type === 'table') {
-          return <ResponseTable key={`table-${index}`} lines={block.lines} />;
-        }
-
-        const line = block.line;
-        const heading = line.replace(/^#{1,6}\s*/, '');
-        const numbered = heading.match(/^(\d+)\.\s+(.*)/);
-        const bullet = heading.match(/^[-*]\s+(.*)/);
-        const isHeading =
-          /^#{1,6}\s/.test(line) ||
-          (/^[A-Z][^.!?]{2,48}:$/.test(heading) && !numbered) ||
-          (mode === 'test' && /question|answer|rubric|explanation|challenge|case|vignette/i.test(heading));
-
-        // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map.
-        const flowSource = bullet ? bullet[1] : numbered ? numbered[2] : heading;
-        const flowNodes = flowSource.split(/\s*(?:->|=>|→)\s*/).map((node) => node.trim()).filter(Boolean);
-        if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 220) {
-          return (
-            <div className="flow-map" key={`flow-${index}`}>
-              {flowNodes.map((node, nodeIndex) => (
-                <React.Fragment key={`${node}-${nodeIndex}`}>
-                  <span className="flow-node"><InlineText text={node} /></span>
-                  {nodeIndex < flowNodes.length - 1 && <span className="flow-arrow" aria-hidden="true">→</span>}
-                </React.Fragment>
-              ))}
-            </div>
-          );
-        }
-
-        if (numbered) {
-          return (
-            <div className="answer-row numbered" key={`${line}-${index}`}>
-              <span>{numbered[1]}</span>
-              <p>
-                <InlineText text={numbered[2]} />
-              </p>
-            </div>
-          );
-        }
-
-        if (bullet) {
-          return (
-            <div className="answer-row bullet" key={`${line}-${index}`}>
-              <span></span>
-              <p>
-                <InlineText text={bullet[1]} />
-              </p>
-            </div>
-          );
-        }
-
-        if (isHeading) {
-          return (
-            <h3 key={`${line}-${index}`}>
-              <InlineText text={heading.replace(/:$/, '')} />
-            </h3>
-          );
-        }
-
-        return (
-          <p key={`${line}-${index}`}>
-            <InlineText text={heading} />
-          </p>
-        );
-      })}
+    <div className={wrapClass}>
+      {intro.map((block, index) => <RenderBlock key={`intro-${index}`} block={block} mode={mode} />)}
+      {sections.map((section, index) => (
+        <AnswerSection key={`sec-${index}`} title={section.title} blocks={section.blocks} mode={mode} defaultOpen={index === 0} />
+      ))}
     </div>
   );
 }
@@ -2453,9 +2489,16 @@ function App() {
             ) : page === 'engines' ? (
               <section className="engines-page">
                 <div className="engines-hero-bar">
-                  <p>Engines</p>
-                  <h3>Pick a tool. It turns your source into one focused study output.</h3>
+                  <p>Study tools</p>
+                  <h3>Turn your own notes into one focused study output.</h3>
+                  <small>Each tool reads only the source you uploaded and gives you something specific back: a gap check, a comparison table, a practice case, mnemonics, and more. Pick what you need for today.</small>
                 </div>
+                {!studySet && (
+                  <div className="engines-need-source">
+                    <span>Add a study source first so these tools can work from your material.</span>
+                    <button type="button" onClick={() => navigate('library')}>Add a source</button>
+                  </div>
+                )}
                 {engineGroups.map((group) => (
                   <div key={group.key} className="engine-group">
                     <div className="engine-group-head">
@@ -2474,7 +2517,7 @@ function App() {
                             <strong>{engine.title}</strong>
                             <span>{engine.copy}</span>
                             <button type="button" onClick={() => createArtifact(engine.id)} disabled={!studySet || !!busy}>
-                              Run engine
+                              Generate
                             </button>
                           </article>
                         );
@@ -2787,6 +2830,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 const rootElement = document.getElementById('root');
-const root = window.__SIMAV_DENTAL_ROOT__ || createRoot(rootElement);
-window.__SIMAV_DENTAL_ROOT__ = root;
-root.render(<App />);
+if (rootElement) {
+  const root = window.__SIMAV_DENTAL_ROOT__ || createRoot(rootElement);
+  window.__SIMAV_DENTAL_ROOT__ = root;
+  root.render(<App />);
+}

@@ -101,6 +101,78 @@
   letter-spacing: -0.015em;
 }
 
+/* Study Tools (engines) page clarity */
+:root[data-theme="dark"] .engines-hero-bar small {
+  display: block;
+  margin-top: 6px;
+  color: var(--c-muted, #8794ab);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  max-width: 70ch;
+}
+:root[data-theme="dark"] .engines-need-source {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(54, 214, 195, 0.4);
+  background: rgba(54, 214, 195, 0.06);
+  color: #bfeee6;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+:root[data-theme="dark"] .engines-need-source button {
+  border: 0;
+  background: linear-gradient(180deg, #3ee0cd, #25b6a6);
+  color: #04130f;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  border-radius: 9px;
+}
+
+/* collapsible answer sections: scan, then expand what you need */
+.answer-section {
+  border: 1px solid var(--c-line, #232c3d);
+  border-radius: 12px;
+  margin: 10px 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+.answer-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-weight: 750;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+}
+.answer-section-head:hover { background: rgba(255, 255, 255, 0.035); }
+.answer-section-head .sec-caret { flex: none; opacity: 0.65; transition: transform 0.15s ease; }
+.answer-section.open .answer-section-head .sec-caret { transform: rotate(90deg); }
+.answer-section-head .sec-count {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--c-muted, #8794ab);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.answer-section-body { padding: 2px 14px 12px; }
+.answer-section-body > h3:first-child { margin-top: 4px; }
+
 /* page-intro icon badge picks up the accent */
 :root[data-theme="dark"] .page-icon {
   background: linear-gradient(180deg, rgba(54, 214, 195, 0.18), rgba(54, 214, 195, 0.06));

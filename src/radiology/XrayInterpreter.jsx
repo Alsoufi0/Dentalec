@@ -152,6 +152,7 @@ export default function XrayInterpreter({ cases, loading, error, caseId, setCase
             <button type="button" className="xi-submit" onClick={submit} disabled={status === 'loading' || !interpretation.trim()}>
               {status === 'loading' ? <><Loader2 size={16} className="spin" /> Reading…</> : <><Sparkles size={16} /> Get feedback</>}
             </button>
+            <p className="rad-disclaimer">AI feedback is a study aid to check your reasoning. It uses a general vision model that can misread radiographs, so treat it as a practice partner, not a source of truth, and never for clinical decisions.</p>
 
             {status === 'error' && <p className="xi-err">{reqError}</p>}
 

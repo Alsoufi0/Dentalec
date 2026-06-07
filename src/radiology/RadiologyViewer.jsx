@@ -393,6 +393,7 @@ export default function RadiologyViewer({ case: c, onBack, onDelete }) {
             ))}
             {!visibleAnn.length && <p className="muted">No structures at this level.</p>}
           </div>
+          <p className="rad-disclaimer">Study aid only. Annotations are teaching guides and measurements depend on calibration, so both can be imprecise. Not for diagnosis or clinical use.</p>
         </aside>
       </div>
     </div>
