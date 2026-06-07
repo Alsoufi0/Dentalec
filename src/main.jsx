@@ -339,14 +339,15 @@ function RenderBlock({ block, mode }) {
   // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map.
   const flowSource = bullet ? bullet[1] : numbered ? numbered[2] : heading;
   const flowNodes = flowSource.split(/\s*(?:->|=>|→)\s*/).map((node) => node.trim()).filter(Boolean);
-  if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 220) {
+  if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 240) {
+    // A proper connected step map (a stepper with a connecting rail), not text arrows.
     return (
-      <div className="flow-map">
+      <div className="vmap">
         {flowNodes.map((node, nodeIndex) => (
-          <React.Fragment key={`${node}-${nodeIndex}`}>
-            <span className="flow-node"><InlineText text={node} /></span>
-            {nodeIndex < flowNodes.length - 1 && <span className="flow-arrow" aria-hidden="true">→</span>}
-          </React.Fragment>
+          <div className="vmap-step" key={`${node}-${nodeIndex}`}>
+            <div className="vmap-rail"><span className="vmap-dot">{nodeIndex + 1}</span></div>
+            <div className="vmap-card"><InlineText text={node} /></div>
+          </div>
         ))}
       </div>
     );
@@ -442,15 +443,12 @@ function ResponseContent({ text, mode }) {
   );
 }
 
+// A small, curated set of starting points (kept short on purpose).
 const commandActions = [
-  { title: 'Study a Topic', subtitle: 'Deepen your understanding', icon: BookOpen, page: 'explanation', prompt: 'Teach this topic using the seven-level dental learning ladder.' },
-  { title: 'Clinical Cases', subtitle: 'Solve patient scenarios', icon: Stethoscope, artifact: 'clinicalCase', prompt: 'Create a step-by-step clinical case simulator from this subject.' },
-  { title: 'X-Ray Interpreter', subtitle: 'Read radiology step-by-step', icon: Activity, artifact: 'radiologyChecklist', prompt: 'Create a radiology interpretation checklist for this subject.' },
+  { title: 'Study a topic', subtitle: 'Clear, layered explanations', icon: BookOpen, page: 'explanation', prompt: 'Teach this topic using the seven-level dental learning ladder.' },
+  { title: 'Ask the tutor', subtitle: 'Answers from your source', icon: Brain, page: 'answer', prompt: 'Open the professor tutor for this subject.' },
   { title: 'Flashcards', subtitle: 'Review with spaced repetition', icon: BookmarkPlus, artifact: 'flashcards', prompt: 'Create source-grounded flashcards for this subject.' },
-  { title: 'MCQ Practice', subtitle: 'Timed questions and weak spots', icon: CircleHelp, artifact: 'examinerQuestions', prompt: 'Create board-style MCQs and mark schemes for this subject.' },
-  { title: 'Oral Exam Practice', subtitle: 'Train examiner answers', icon: FileQuestion, page: 'test', prompt: 'Start an oral exam on this subject.' },
-  { title: 'AI Tutor', subtitle: 'Ask anything, learn better', icon: Brain, page: 'answer', prompt: 'Open the professor tutor for this subject.' },
-  { title: 'Treatment Planning', subtitle: 'Protocols and decisions', icon: ClipboardList, artifact: 'treatmentProtocol', prompt: 'Build an educational treatment protocol for this subject.' }
+  { title: 'Practice exam', subtitle: 'Questions and weak spots', icon: FileQuestion, page: 'test', prompt: 'Start an oral exam on this subject.' }
 ];
 
 const dentalSubjects = [

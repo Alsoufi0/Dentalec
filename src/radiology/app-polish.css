@@ -151,6 +151,72 @@
   border-radius: 9px;
 }
 
+/* ---- Apple-clean refinements: tables, charts, motion ---- */
+:root[data-theme="dark"] .answer-table-wrap {
+  border: 1px solid var(--c-line, #232c3d); border-radius: 14px; overflow: hidden;
+  background: var(--c-panel, #111722); margin: 12px 0;
+}
+:root[data-theme="dark"] .answer-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+:root[data-theme="dark"] .answer-table th {
+  background: rgba(255, 255, 255, 0.03); color: var(--c-muted, #8794ab);
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+  padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--c-line, #232c3d);
+}
+:root[data-theme="dark"] .answer-table td {
+  padding: 11px 14px; font-size: 0.86rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+:root[data-theme="dark"] .answer-table tr:last-child td { border-bottom: 0; }
+:root[data-theme="dark"] .answer-table tbody tr { transition: background 0.12s ease; }
+:root[data-theme="dark"] .answer-table tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
+
+/* score chart bars: cleaner, animated fill */
+:root[data-theme="dark"] .answer-chart { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 14px; background: var(--c-panel, #111722); }
+:root[data-theme="dark"] .chart-row { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 12px; }
+:root[data-theme="dark"] .chart-row > div { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+:root[data-theme="dark"] .chart-row > div i { display: block; height: 100%; width: var(--score-width, 0%); border-radius: 999px; background: linear-gradient(90deg, #3ee0cd, #5b8bff); transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+:root[data-theme="dark"] .score-cell i { background: linear-gradient(90deg, #3ee0cd, #5b8bff) !important; }
+
+/* motion: smooth, reactive, restrained (Apple-like) */
+:root[data-theme="dark"] .glass-panel,
+:root[data-theme="dark"] .engine-card,
+:root[data-theme="dark"] .clinic-grid article,
+:root[data-theme="dark"] .cl-card,
+:root[data-theme="dark"] .mastery-card,
+:root[data-theme="dark"] .command-actions button,
+:root[data-theme="dark"] .mode-starter-chips button {
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+:root[data-theme="dark"] .mode-starter-chips button:hover { transform: translateY(-1px); border-color: rgba(54, 214, 195, 0.4); }
+:root[data-theme="dark"] .primary-chip:hover { transform: translateY(-1px); filter: brightness(1.05); }
+:root[data-theme="dark"] button:focus-visible,
+:root[data-theme="dark"] input:focus-visible,
+:root[data-theme="dark"] textarea:focus-visible { outline: 2px solid rgba(54, 214, 195, 0.6); outline-offset: 2px; }
+
+/* proper connected step map (replaces inline text arrows) */
+.vmap { display: flex; flex-direction: column; margin: 14px 0; }
+.vmap-step { display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding-bottom: 12px; }
+.vmap-step:last-child { padding-bottom: 0; }
+.vmap-rail { position: relative; display: flex; justify-content: center; }
+.vmap-dot {
+  width: 28px; height: 28px; border-radius: 999px; z-index: 1;
+  background: linear-gradient(180deg, #3ee0cd, #25b6a6); color: #04130f;
+  font-weight: 800; font-size: 0.8rem; display: grid; place-items: center;
+  box-shadow: 0 4px 12px -4px rgba(54, 214, 195, 0.6);
+}
+.vmap-step:not(:last-child) .vmap-rail::after {
+  content: ''; position: absolute; top: 26px; bottom: -14px; left: 50%;
+  transform: translateX(-50%); width: 2px;
+  background: linear-gradient(180deg, rgba(54, 214, 195, 0.55), rgba(54, 214, 195, 0.12));
+}
+.vmap-card {
+  align-self: start;
+  background: var(--c-panel, #111722);
+  border: 1px solid var(--c-line, #232c3d);
+  border-radius: 12px; padding: 10px 14px; font-size: 0.9rem; line-height: 1.45;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.vmap-card:hover { border-color: rgba(54, 214, 195, 0.45); transform: translateX(2px); }
+
 /* collapsible answer sections: scan, then expand what you need */
 .answer-section {
   border: 1px solid var(--c-line, #232c3d);
