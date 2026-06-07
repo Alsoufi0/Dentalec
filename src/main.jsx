@@ -785,18 +785,23 @@ function ModeWorkspace({ page, studySet, busy, submitStudy, createArtifact, navi
           {workflow.cta}
         </button>
       </div>
-      {workflow.starters && (
+      {!studySet ? (
+        <div className="engines-need-source">
+          <span>Add a study source first, then this works from your own material.</span>
+          <button type="button" onClick={() => navigate('library')}>Add a source</button>
+        </div>
+      ) : workflow.starters ? (
         <div className="mode-starters">
           <span className="mode-starters-label">Or try a question</span>
           <div className="mode-starter-chips">
             {workflow.starters.map((starter) => (
-              <button key={starter} type="button" onClick={() => submitStudy(starter)} disabled={!studySet || !!busy}>
+              <button key={starter} type="button" onClick={() => submitStudy(starter)} disabled={!!busy}>
                 {starter}
               </button>
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -2437,9 +2442,9 @@ function App() {
               <section className="mastery-page">
                 <div className="mastery-hero">
                   <div>
-                    <p>Adaptive Dentistry Engine</p>
+                    <p>Your progress</p>
                     <h3>{masteryModel.average}% readiness</h3>
-                    <span>{masteryModel.weakest.map((item) => item.topic).join(' and ') || 'Upload material to start the map'} are least covered right now.</span>
+                    <span>{masteryModel.weakest.length ? `${masteryModel.weakest.map((item) => item.topic).join(' and ')} are least covered right now.` : 'Study and review to start building your readiness map.'}</span>
                     <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
                       Build rescue plan
                     </button>
@@ -2448,12 +2453,18 @@ function App() {
                     <MasteryRadar domains={masteryModel.domains} />
                   </div>
                 </div>
+                {!studySet && (
+                  <div className="engines-need-source">
+                    <span>Add a study source and review some flashcards to start tracking your progress.</span>
+                    <button type="button" onClick={() => navigate('library')}>Add a source</button>
+                  </div>
+                )}
                 <div className="mastery-grid">
                   {masteryModel.domains.map((domain) => (
                     <article key={domain.topic} className="mastery-card">
                       <div>
                         <strong>{domain.topic}</strong>
-                        <span>{domain.relatedCards} related cards, {domain.reviewed} reviewed</span>
+                        <span>{domain.relatedCards || domain.reviewed ? `${domain.relatedCards} related cards, ${domain.reviewed} reviewed` : 'Not started yet'}</span>
                       </div>
                       <meter min="0" max="100" value={domain.score}></meter>
                       <div className="confidence-row">
