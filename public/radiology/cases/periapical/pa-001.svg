@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 620" width="480" height="620">
+
+  <defs>
+    <radialGradient id="bone" cx="50%" cy="44%" r="80%">
+      <stop offset="0%" stop-color="#394954"/>
+      <stop offset="60%" stop-color="#212c35"/>
+      <stop offset="100%" stop-color="#10161c"/>
+    </radialGradient>
+    <linearGradient id="dentin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#aeb8bf"/>
+      <stop offset="100%" stop-color="#7c8893"/>
+    </linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0"/>
+      <feComposite operator="over" in2="SourceGraphic"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="0.6"/></filter>
+  </defs>
+  <rect width="480" height="620" fill="url(#bone)"/>
+<g filter="url(#soft)" opacity="0.4" fill="#7e8a92">
+    <path d="M70 150 Q110 130 150 150 L138 360 Q120 470 96 520 L60 520 Q44 420 50 300 Z"/>
+    <path d="M410 150 Q370 130 330 150 L342 360 Q360 470 384 520 L420 520 Q436 420 430 300 Z"/>
+  </g><path d="M0 250 Q240 225 480 250 L480 240 Q240 215 0 240 Z" fill="#9aa7af" opacity="0.6"/><g opacity="0.4" stroke="#5a6772" stroke-width="0.9" fill="none"><path d="M20 320 L460 310"/><path d="M20 380 L460 372"/><path d="M20 440 L460 434"/><path d="M20 500 L460 496"/><path d="M20 560 L460 558"/></g><g filter="url(#soft)">
+    <path d="M165 110 Q240 106 315 110
+    L270 470 Q240 475 210 470 Z" fill="url(#dentin)"/>
+    <path d="M165 110 Q240 104 315 110
+    L292.5 232.4 Q240 229.4 187.5 232.4 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M240 232.4 L240 405.2" stroke="#1b242b" stroke-width="18" opacity="0.8" fill="none" stroke-linecap="round"/>
+    <path d="M315 116 q-33 3 0 8" fill="#1b242b" opacity="0.85"/>
+  </g><path d="M170 250 Q148 380 210 520" fill="none" stroke="#10171c" stroke-width="3" opacity="0.8"/>
+    <path d="M310 250 Q332 380 270 520" fill="none" stroke="#10171c" stroke-width="3" opacity="0.8"/><ellipse cx="240" cy="525" rx="34" ry="28" fill="#0b1015" opacity="0.85" filter="url(#soft)"/>
+  <rect width="480" height="620" filter="url(#grain)" opacity="0.45"/>
+</svg>

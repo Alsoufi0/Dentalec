@@ -1,0 +1,150 @@
+{
+  "$schema": "./manifest.schema.note",
+  "version": 1,
+  "note": "Case contract for the radiology module. annotations.x/y are percentages (0-100) of the image. tone: opaque | lucent | finding. level gates visibility by difficulty (beginner shows beginner; intermediate adds intermediate; advanced shows all). Drop licensed dataset images into cases/<type>/ and add entries here.",
+  "cases": [
+    {
+      "id": "pano-real-01",
+      "title": "Panoramic, adult full dentition",
+      "type": "panoramic",
+      "difficulty": "intermediate",
+      "modality": "image",
+      "image": "/radiology/cases/panoramic/pano-real-01.png",
+      "pathologies": ["normal anatomy", "third molars"],
+      "description": "A real panoramic radiograph. Work left to right: condyles, sinuses, then the dentition and mandibular borders. Use the measurement tool to assess symmetry and bone height.",
+      "keyFindings": [
+        "Identify the mandibular condyles and rami on both sides",
+        "Locate the maxillary sinuses above the posterior teeth",
+        "Trace the inferior alveolar canal through each side of the mandible",
+        "Check for third molars and their angulation"
+      ],
+      "annotations": [
+        { "id": "condyle-l", "x": 13, "y": 22, "level": "beginner", "tone": "opaque", "structure": "Mandibular condyle", "note": "Rounded head of the mandible in the joint. Compare both sides for symmetry." },
+        { "id": "sinus-l", "x": 34, "y": 33, "level": "beginner", "tone": "lucent", "structure": "Maxillary sinus", "note": "Air-filled radiolucency above the upper molars. A normal landmark, not a lesion." },
+        { "id": "sinus-r", "x": 66, "y": 33, "level": "intermediate", "tone": "lucent", "structure": "Maxillary sinus", "note": "Paired sinus on the opposite side; the floor often dips between roots." },
+        { "id": "canal", "x": 26, "y": 64, "level": "intermediate", "tone": "lucent", "structure": "Inferior alveolar canal", "note": "Radiolucent band carrying the nerve through the mandible. Map it before lower-molar surgery." },
+        { "id": "ramus", "x": 16, "y": 55, "level": "advanced", "tone": "opaque", "structure": "Mandibular ramus", "note": "Vertical bony plate; assess width and any radiolucent or radiopaque lesions." }
+      ],
+      "source": { "name": "User-provided sample", "license": "Provided for in-app teaching use", "url": "" }
+    },
+    {
+      "id": "pa-real-01",
+      "title": "Periapical, mandibular molars",
+      "type": "periapical",
+      "difficulty": "intermediate",
+      "modality": "image",
+      "image": "/radiology/cases/periapical/pa-real-01.jpeg",
+      "pathologies": ["caries", "restorations"],
+      "description": "A real periapical of lower molars. Read each tooth crown to apex: enamel, dentin, pulp, then the periapical bone and the crestal bone between teeth.",
+      "keyFindings": [
+        "Assess each interproximal surface for caries below the contact point",
+        "Identify any existing restorations and their margins",
+        "Check the pulp chambers and root canals",
+        "Evaluate the periapical bone and the alveolar crest height"
+      ],
+      "annotations": [
+        { "id": "enamel", "x": 30, "y": 17, "level": "beginner", "tone": "opaque", "structure": "Enamel / crown", "note": "Bright outer crown of the molar. Scan the contact points for dark carious notches." },
+        { "id": "pulp", "x": 32, "y": 38, "level": "beginner", "tone": "lucent", "structure": "Pulp chamber", "note": "Dark central space; note its size relative to caries or restorations." },
+        { "id": "furcation", "x": 33, "y": 56, "level": "intermediate", "tone": "lucent", "structure": "Furcation", "note": "Where the molar roots divide. Radiolucency here can mean furcation bone loss." },
+        { "id": "crest", "x": 50, "y": 42, "level": "intermediate", "tone": "opaque", "structure": "Alveolar crest", "note": "Bone level between teeth. Compare against the cemento-enamel junctions." },
+        { "id": "apex", "x": 33, "y": 82, "level": "advanced", "tone": "finding", "structure": "Periapical region", "note": "Check each apex for a radiolucency or widened PDL suggesting apical pathology." }
+      ],
+      "source": { "name": "User-provided sample", "license": "Provided for in-app teaching use", "url": "" }
+    },
+    {
+      "id": "pano-001",
+      "title": "Panoramic survey, mixed findings",
+      "type": "panoramic",
+      "difficulty": "advanced",
+      "modality": "image",
+      "image": "/radiology/cases/panoramic/pano-001.svg",
+      "pathologies": ["impacted tooth", "periapical lesion", "caries"],
+      "description": "Full-mouth panoramic. Survey the dentition, sinuses, and mandibular borders, then localise the focal findings.",
+      "keyFindings": [
+        "Impacted lower third molar, mesioangular, at the right posterior",
+        "Periapical radiolucency at an upper left molar apex",
+        "Interproximal caries on an upper anterior tooth",
+        "Maxillary sinuses and inferior alveolar canal are normal landmarks, not pathology"
+      ],
+      "annotations": [
+        { "id": "sinus-l", "x": 29, "y": 32, "level": "intermediate", "tone": "lucent", "structure": "Maxillary sinus", "note": "Normal air-filled radiolucency above the upper molars. Know it so you do not mistake it for a lesion." },
+        { "id": "sinus-r", "x": 71, "y": 32, "level": "intermediate", "tone": "lucent", "structure": "Maxillary sinus", "note": "Paired with the left sinus. The floor often dips between molar roots." },
+        { "id": "canal", "x": 50, "y": 67, "level": "intermediate", "tone": "lucent", "structure": "Inferior alveolar canal", "note": "Faint radiolucent band running through the mandible. Trace it before any lower molar surgery." },
+        { "id": "caries", "x": 35, "y": 50, "level": "advanced", "tone": "finding", "structure": "Interproximal caries", "note": "Radiolucent notch at a contact point. Compare the same surface on neighbouring teeth." },
+        { "id": "periapical", "x": 16, "y": 23, "level": "advanced", "tone": "finding", "structure": "Periapical radiolucency", "note": "Rounded dark zone at a root apex with loss of lamina dura. Suggests apical periodontitis." },
+        { "id": "impacted", "x": 89, "y": 56, "level": "advanced", "tone": "finding", "structure": "Impacted third molar", "note": "Angled, unerupted molar lodged against the tooth in front. Note its relationship to the canal." }
+      ],
+      "source": { "name": "Procedural demo (DentalOS)", "license": "Internal demo asset", "url": "" }
+    },
+    {
+      "id": "pa-001",
+      "title": "Periapical, apical radiolucency",
+      "type": "periapical",
+      "difficulty": "intermediate",
+      "modality": "image",
+      "image": "/radiology/cases/periapical/pa-001.svg",
+      "pathologies": ["periapical lesion", "caries"],
+      "description": "Single-tooth periapical. Read crown to apex and judge the periapical bone.",
+      "keyFindings": [
+        "Periapical radiolucency at the root apex with loss of lamina dura",
+        "Interproximal caries on the crown",
+        "Pulp chamber and root canal are patent"
+      ],
+      "annotations": [
+        { "id": "enamel", "x": 50, "y": 20, "level": "beginner", "tone": "opaque", "structure": "Enamel cap", "note": "Brightest tissue. The dense outer shell of the crown." },
+        { "id": "pulp", "x": 50, "y": 45, "level": "beginner", "tone": "lucent", "structure": "Pulp / canal", "note": "Dark central space. Watch its width and continuity to the apex." },
+        { "id": "crest", "x": 30, "y": 40, "level": "intermediate", "tone": "opaque", "structure": "Alveolar crest", "note": "Bone height beside the tooth. Drops in periodontal disease." },
+        { "id": "pdl", "x": 35, "y": 52, "level": "intermediate", "tone": "lucent", "structure": "PDL space", "note": "Thin dark line along the root. Uniform width is healthy." },
+        { "id": "caries", "x": 66, "y": 20, "level": "advanced", "tone": "finding", "structure": "Interproximal caries", "note": "Radiolucent notch below the contact point." },
+        { "id": "lesion", "x": 50, "y": 85, "level": "advanced", "tone": "finding", "structure": "Periapical radiolucency", "note": "Dark halo at the apex with lost lamina dura. The headline finding here." }
+      ],
+      "source": { "name": "Procedural demo (DentalOS)", "license": "Internal demo asset", "url": "" }
+    },
+    {
+      "id": "pa-002",
+      "title": "Periapical, sound apex",
+      "type": "periapical",
+      "difficulty": "beginner",
+      "modality": "image",
+      "image": "/radiology/cases/periapical/pa-002.svg",
+      "pathologies": ["caries"],
+      "description": "A near-normal periapical for orientation. Identify the structures and the single carious surface.",
+      "keyFindings": [
+        "Interproximal caries on the crown",
+        "Intact lamina dura and normal periapical bone",
+        "No periapical radiolucency"
+      ],
+      "annotations": [
+        { "id": "enamel", "x": 50, "y": 20, "level": "beginner", "tone": "opaque", "structure": "Enamel cap", "note": "The bright crown shell." },
+        { "id": "dentin", "x": 40, "y": 33, "level": "beginner", "tone": "opaque", "structure": "Dentin", "note": "The grey body of the tooth under the enamel." },
+        { "id": "pulp", "x": 50, "y": 48, "level": "beginner", "tone": "lucent", "structure": "Pulp / canal", "note": "Central dark canal, tapering to the apex." },
+        { "id": "pdl", "x": 35, "y": 55, "level": "intermediate", "tone": "lucent", "structure": "PDL space", "note": "Uniform thin line, a sign of health here." },
+        { "id": "caries", "x": 66, "y": 20, "level": "advanced", "tone": "finding", "structure": "Interproximal caries", "note": "The only real finding on this film." }
+      ],
+      "source": { "name": "Procedural demo (DentalOS)", "license": "Internal demo asset", "url": "" }
+    },
+    {
+      "id": "bw-001",
+      "title": "Bitewing, posterior caries",
+      "type": "bitewing",
+      "difficulty": "intermediate",
+      "modality": "image",
+      "image": "/radiology/cases/bitewing/bw-001.svg",
+      "pathologies": ["caries"],
+      "description": "Posterior bitewing. The bitewing is the workhorse for interproximal caries and crestal bone.",
+      "keyFindings": [
+        "Interproximal caries on an upper premolar/molar",
+        "Interproximal caries on a lower molar",
+        "Alveolar crests are at a normal height"
+      ],
+      "annotations": [
+        { "id": "contact", "x": 50, "y": 49, "level": "beginner", "tone": "lucent", "structure": "Occlusal plane", "note": "Where the upper and lower crowns meet. Caries hides just below the contacts." },
+        { "id": "crest-u", "x": 50, "y": 35, "level": "intermediate", "tone": "opaque", "structure": "Upper alveolar crest", "note": "Crestal bone level. Loss flags periodontal breakdown." },
+        { "id": "crest-l", "x": 50, "y": 66, "level": "intermediate", "tone": "opaque", "structure": "Lower alveolar crest", "note": "Compare height across the arch." },
+        { "id": "caries-u", "x": 46, "y": 49, "level": "advanced", "tone": "finding", "structure": "Interproximal caries (upper)", "note": "Radiolucent wedge on the distal contact." },
+        { "id": "caries-l", "x": 64, "y": 52, "level": "advanced", "tone": "finding", "structure": "Interproximal caries (lower)", "note": "A second lesion on the lower arch." }
+      ],
+      "source": { "name": "Procedural demo (DentalOS)", "license": "Internal demo asset", "url": "" }
+    }
+  ]
+}

@@ -13,18 +13,27 @@
     "start:prod": "npm run build && node server/index.js"
   },
   "dependencies": {
+    "@cornerstonejs/core": "^4.22.13",
+    "@cornerstonejs/dicom-image-loader": "^4.22.13",
+    "@cornerstonejs/tools": "^4.22.13",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
+    "dcmjs": "^0.52.0",
+    "dicom-parser": "^1.8.21",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "gsap": "^3.15.0",
+    "hammerjs": "^2.0.8",
     "lucide-react": "^0.468.0",
     "multer": "^2.0.2",
     "openai": "^6.7.0",
     "pg": "^8.13.1",
-    "vite": "^7.1.12",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
-  },
-  "devDependencies": {}
+    "react-dom": "^19.1.1",
+    "three": "^0.184.0",
+    "vite": "^7.1.12"
+  }
 }

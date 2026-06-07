@@ -26,6 +26,7 @@ import {
   Mic,
   Moon,
   Pause,
+  ScanSearch,
   Search,
   Send,
   Settings,
@@ -41,6 +42,15 @@ import {
   Zap
 } from 'lucide-react';
 import './styles.css';
+import './radiology/app-polish.css';
+
+const Tooth3D = React.lazy(() => import('./Tooth3D.jsx'));
+const Radiology = React.lazy(() => import('./Radiology.jsx'));
+import { CasesPage, RadiologyPage, InterpreterPage } from './radiology/index.jsx';
+
+// Radiology routes render their own dark clinical chrome, so the generic
+// page-intro header is suppressed for them.
+const RAD_PAGES = ['cases', 'radiology', 'interpreter'];
 
 const API_BASE = '/api';
 const STORAGE_KEY = 'simav-dental-tutor-state-v1';
@@ -61,6 +71,9 @@ const pages = [
   { id: 'mastery', label: 'Mastery', icon: CheckCircle2, hint: 'adaptive', prompt: 'Track readiness, spaced review, curriculum progress, and weak-spot remediation.' },
   { id: 'engines', label: 'Engines', icon: Brain, hint: 'DentalOS', prompt: 'Run specialized DentalOS engines for gaps, differentials, protocols, cases, visuals, memory, radiology, and professor workflows.' },
   { id: 'clinic', label: 'Clinic Lab', icon: ClipboardList, hint: 'future', prompt: 'Prototype professor and clinic workflows for observation, feedback, OSCEs, and clinical issue identification.' },
+  { id: 'cases', label: 'Case Library', icon: Layers, hint: 'x-ray cases', prompt: 'Browse and filter teaching radiographs, then open one in the viewer.' },
+  { id: 'radiology', label: 'Radiology Viewer', icon: Activity, hint: 'viewer', prompt: 'Zoom, window, measure, and study annotated structures on an X-ray.' },
+  { id: 'interpreter', label: 'X-ray Interpreter', icon: Sparkles, hint: 'AI feedback', prompt: 'Write your reading of a film and get instant AI feedback.' },
   { id: 'kit', label: 'Study Kit', icon: Library, hint: 'notes & cards', prompt: 'Saved notes, generated flashcards, exports, and review material.' }
 ];
 
@@ -71,13 +84,14 @@ const sidebarItems = [
   { page: 'clinic', label: 'Cases', icon: Stethoscope, hint: 'simulator' },
   { page: 'engines', label: 'Questions', icon: CircleHelp, hint: 'engines' },
   { page: 'kit', label: 'Flashcards', icon: BookmarkPlus, hint: 'review' },
-  { page: 'engines', label: 'Radiology', icon: Activity, hint: 'x-rays' },
+  { page: 'cases', label: 'Radiology', icon: Activity, hint: 'x-ray cases' },
+  { page: 'interpreter', label: 'X-ray Interpreter', icon: ScanSearch, hint: 'AI feedback' },
   { page: 'library', label: 'Notes & Books', icon: Library, hint: 'sources' },
   { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'analytics' },
   { page: 'test', label: 'Exams', icon: FileQuestion, hint: 'practice' },
   { page: 'answer', label: 'AI Tutor', icon: Brain, hint: 'professor' },
-  { page: 'summary', label: 'Dictionary', icon: FileText, hint: 'terms' },
-  { page: 'clinic', label: 'Settings', icon: Settings, hint: 'studio' }
+  { page: 'summary', label: 'Summary', icon: FileText, hint: 'recaps' },
+  { page: 'clinic', label: 'Clinic Lab', icon: ClipboardList, hint: 'studio' }
 ];
 
 const stopPhrases = [
@@ -126,15 +140,22 @@ const curriculumTracks = [
 ];
 
 const dentalosEngines = [
-  { id: 'knowledgeGap', title: 'Knowledge Gap Detector', icon: Brain, copy: 'Find missing prerequisites, misconceptions, and confused concepts before they become exam errors.' },
-  { id: 'differentialDiagnosis', title: 'Differential Diagnosis', icon: ClipboardList, copy: 'Compare similar conditions by clinical, radiographic, histologic, and exam-distinguishing features.' },
-  { id: 'treatmentProtocol', title: 'Treatment Protocol', icon: CheckCircle2, copy: 'Build safe educational protocols with steps, materials, errors, contraindications, complications, and follow-up.' },
-  { id: 'examinerQuestions', title: 'Examiner Engine', icon: FileQuestion, copy: 'Generate MCQs, oral questions, board-style prompts, practical stations, and marking rubrics.' },
-  { id: 'clinicalCase', title: 'Case Simulator', icon: MessageCircleQuestion, copy: 'Practice anamnesis, findings, imaging clues, differentials, treatment discussion, prognosis, and debrief.' },
-  { id: 'visualLearning', title: 'Visual Learning', icon: LayoutDashboard, copy: 'Turn topics into flowcharts, decision trees, diagnostic pathways, comparison tables, and memory maps.' },
-  { id: 'memoryPlan', title: 'Memory Engine', icon: BookmarkPlus, copy: 'Create spaced repetition schedules, flashcard clusters, mnemonics, pearls, and retention checklists.' },
-  { id: 'radiologyChecklist', title: 'Radiology Learning', icon: FileText, copy: 'Train interpretation checklists for periapicals, bitewings, OPG, CBCT, and clinical photos.' },
-  { id: 'professorStudio', title: 'Professor Studio', icon: GraduationCap, copy: 'Create objectives, OSCEs, rubrics, class misconception maps, and remediation activities.' }
+  { id: 'knowledgeGap', title: 'Knowledge Gap Detector', icon: Brain, group: 'Understand', produces: 'Gap map', copy: 'Spot missing prerequisites and confused concepts.' },
+  { id: 'differentialDiagnosis', title: 'Differential Diagnosis', icon: ClipboardList, group: 'Understand', produces: 'Comparison table', copy: 'Tell similar conditions apart in one table.' },
+  { id: 'visualLearning', title: 'Visual Learning', icon: LayoutDashboard, group: 'Understand', produces: 'Flow diagram', copy: 'See the topic as flow maps and pathways.' },
+  { id: 'examinerQuestions', title: 'Examiner Engine', icon: FileQuestion, group: 'Practice', produces: 'MCQs + rubric', copy: 'Board-style questions with a marking rubric.' },
+  { id: 'clinicalCase', title: 'Case Simulator', icon: MessageCircleQuestion, group: 'Practice', produces: 'Worked case', copy: 'Solve a realistic patient case step by step.' },
+  { id: 'memoryPlan', title: 'Memory Engine', icon: BookmarkPlus, group: 'Practice', produces: 'Review plan', copy: 'Spaced-review schedule, mnemonics, and pearls.' },
+  { id: 'treatmentProtocol', title: 'Treatment Protocol', icon: CheckCircle2, group: 'Clinical', produces: 'Protocol table', copy: 'Safe steps, materials, and common pitfalls.' },
+  { id: 'radiologyChecklist', title: 'Radiology Learning', icon: FileText, group: 'Clinical', produces: 'Read checklist', copy: 'A checklist for reading radiographs.' },
+  { id: 'professorStudio', title: 'Professor Studio', icon: GraduationCap, group: 'Teach', produces: 'Teaching pack', copy: 'Objectives, OSCE stations, and rubrics.' }
+];
+
+const engineGroups = [
+  { key: 'Understand', caption: 'Build and repair understanding' },
+  { key: 'Practice', caption: 'Test yourself and retain it' },
+  { key: 'Clinical', caption: 'Apply it safely in context' },
+  { key: 'Teach', caption: 'Professor and assessment tools' }
 ];
 
 const spacedIntervals = {
@@ -330,6 +351,22 @@ function ResponseContent({ text, mode }) {
           (/^[A-Z][^.!?]{2,48}:$/.test(heading) && !numbered) ||
           (mode === 'test' && /question|answer|rubric|explanation|challenge|case|vignette/i.test(heading));
 
+        // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map.
+        const flowSource = bullet ? bullet[1] : numbered ? numbered[2] : heading;
+        const flowNodes = flowSource.split(/\s*(?:->|=>|→)\s*/).map((node) => node.trim()).filter(Boolean);
+        if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 220) {
+          return (
+            <div className="flow-map" key={`flow-${index}`}>
+              {flowNodes.map((node, nodeIndex) => (
+                <React.Fragment key={`${node}-${nodeIndex}`}>
+                  <span className="flow-node"><InlineText text={node} /></span>
+                  {nodeIndex < flowNodes.length - 1 && <span className="flow-arrow" aria-hidden="true">→</span>}
+                </React.Fragment>
+              ))}
+            </div>
+          );
+        }
+
         if (numbered) {
           return (
             <div className="answer-row numbered" key={`${line}-${index}`}>
@@ -403,7 +440,9 @@ const modeWorkflows = {
       ['Require evidence', 'Ask for source-grounded reasoning and citations when the source supports it.'],
       ['Close the loop', 'Request related concepts and exam traps after the answer.']
     ],
-    prompt: 'Answer this like a dental professor: include the direct answer, source-grounded reasoning, knowledge gaps, related concepts, common mistakes, and exam pearls.'
+    prompt: 'Answer this like a dental professor: include the direct answer, source-grounded reasoning, knowledge gaps, related concepts, common mistakes, and exam pearls.',
+    cta: 'Ask the professor',
+    starters: ['What are the highest-yield facts in this source?', 'Explain the hardest concept here simply', 'What do students most often get wrong on this topic?']
   },
   summary: {
     title: 'Structured Study Builder',
@@ -413,7 +452,9 @@ const modeWorkflows = {
       ['Tables', 'Use comparison tables for diseases, tests, materials, criteria, and protocols.'],
       ['Recall', 'End with active-recall prompts and a 60-second recap.']
     ],
-    prompt: 'Create a structured dental study summary with tables, clinical relevance, exam traps, active recall, and a 60-second recap.'
+    prompt: 'Create a structured dental study summary with tables, clinical relevance, exam traps, active recall, and a 60-second recap.',
+    cta: 'Build the summary',
+    starters: ['Summarize the whole source for an exam', 'Build a comparison table of the key conditions', 'Give me the 60-second recap']
   },
   explanation: {
     title: 'Seven-Level Explanation Lab',
@@ -423,7 +464,9 @@ const modeWorkflows = {
       ['Level 3-4', 'Detailed textbook mechanism and clinical application.'],
       ['Level 5-7', 'Examiner answer, board review, and expert decision-making.']
     ],
-    prompt: 'Explain this topic at levels 1 through 7: simple, student, detailed textbook, clinical application, examiner answer, board review, and expert clinical reasoning.'
+    prompt: 'Explain this topic at levels 1 through 7: simple, student, detailed textbook, clinical application, examiner answer, board review, and expert clinical reasoning.',
+    cta: 'Explain it to me',
+    starters: ['Explain the main mechanism step by step', 'Give me a memory hook for this topic', 'Why does this matter clinically?']
   },
   test: {
     title: 'Examiner Simulation',
@@ -433,20 +476,119 @@ const modeWorkflows = {
       ['Rubric', 'Grade with criteria, marks, feedback, and critical errors.'],
       ['Remediation', 'Generate targeted drills for weak points.']
     ],
-    prompt: 'Start an examiner-style dental test with oral questions, a clinical vignette, a marking rubric table, critical errors, and adaptive remediation.'
+    prompt: 'Start an examiner-style dental test with oral questions, a clinical vignette, a marking rubric table, critical errors, and adaptive remediation.',
+    cta: 'Start the test',
+    starters: ['Quiz me with 5 oral-exam questions', 'Give me one clinical vignette to solve', 'Test my weak spots from this source']
   }
 };
 
 const anatomyStructures = [
-  { id: 'crown', label: 'Crown', detail: 'Visible tooth structure above the gingival margin. It protects inner tissues and carries occlusal forces.', points: ['Includes enamel-covered functional surfaces', 'Shape guides mastication and contacts', 'Common site for caries and fractures'], related: ['Occlusion', 'Caries progression', 'Crown fractures'] },
-  { id: 'enamel', label: 'Enamel', detail: 'Highly mineralized outer tissue that resists wear but cannot regenerate once lost.', points: ['Hardest tissue in the body', 'Demineralizes during early caries', 'Bonding depends on etched prism structure'], related: ['White spot lesions', 'Fluoride', 'Etch and bond'] },
-  { id: 'dentin', label: 'Dentin', detail: 'Dentin forms the bulk of the tooth and contains tubules extending toward the pulp.', points: ['Less mineralized than enamel', 'Contains dentinal tubules', 'Sensitive to stimuli'], related: ['Pulp anatomy', 'Dentin hypersensitivity', 'Caries progression'] },
-  { id: 'pulp', label: 'Pulp Chamber', detail: 'Neurovascular core responsible for vitality, pain signaling, and reparative dentin formation.', points: ['Contains vessels and nerves', 'Inflammation causes pulpitis', 'Requires careful endodontic access'], related: ['Pulpitis', 'Endodontics', 'Pain diagnosis'] },
-  { id: 'root', label: 'Root Canal', detail: 'Canal pathway carrying pulp tissue through the root to the apical foramen.', points: ['Complex anatomy is common', 'Cleaning and shaping require length control', 'Missed canals cause failure'], related: ['Working length', 'Irrigation', 'Obturation'] },
-  { id: 'cementum', label: 'Cementum', detail: 'Root surface tissue that anchors periodontal ligament fibers.', points: ['Covers root dentin', 'Supports attachment fibers', 'Exposed surfaces are vulnerable to root caries'], related: ['Root caries', 'Periodontium', 'Attachment loss'] },
-  { id: 'periodontal', label: 'Periodontal Ligament', detail: 'Fibrous ligament between cementum and alveolar bone that absorbs forces and provides proprioception.', points: ['Suspends the tooth in bone', 'Widening may indicate inflammation or trauma', 'Essential for mobility assessment'], related: ['Periapical lesions', 'Mobility', 'Periodontitis'] },
-  { id: 'apex', label: 'Apical Foramen', detail: 'Opening at the root apex where neurovascular supply enters and exits.', points: ['Key landmark for endodontic length', 'Periapical disease often centers here', 'Anatomy may vary'], related: ['Apical periodontitis', 'Working length', 'Radiographic apex'] }
+  {
+    id: 'crown',
+    label: 'Crown',
+    tissue: 'Anatomical region',
+    color: '#cfe9ff',
+    anchor: [50, 17],
+    detail: 'The enamel-covered part of the tooth that sits above the gingival margin and does the chewing. Its contour guides occlusion, contacts, and food deflection, and it is the most common site for caries, fractures, and restorations.',
+    points: ['Enamel-covered functional surface above the gum', 'Shape controls occlusion, contacts, and embrasures', 'Primary site for caries, wear, and fractures'],
+    related: ['Occlusion', 'Caries progression', 'Crown fractures']
+  },
+  {
+    id: 'enamel',
+    label: 'Enamel',
+    tissue: 'Hardest tissue in the body',
+    color: '#f2f6fb',
+    anchor: [70, 22],
+    detail: 'A ~96% mineral (hydroxyapatite) shell covering the crown. It is acellular and avascular, so it cannot regenerate. Early acid demineralization shows as a white-spot lesion and can be remineralized with fluoride before it cavitates.',
+    points: ['~96% hydroxyapatite, hardest tissue in the body', 'Cannot regenerate once lost', 'Acid etching of the prism structure enables bonding'],
+    related: ['White spot lesions', 'Fluoride', 'Etch and bond']
+  },
+  {
+    id: 'dentin',
+    label: 'Dentin',
+    tissue: 'Living tubular tissue',
+    color: '#f2d79a',
+    anchor: [34, 40],
+    detail: 'The living, ~70% mineralized tissue that forms the bulk of the tooth. Fluid-filled dentinal tubules connect to odontoblasts in the pulp, which is why exposed dentin is sensitive and can lay down reparative dentin in response to insult.',
+    points: ['~70% mineral, forms the bulk of the tooth', 'Dentinal tubules transmit stimuli to the pulp', 'Odontoblasts can form reparative/tertiary dentin'],
+    related: ['Pulp anatomy', 'Dentin hypersensitivity', 'Caries progression']
+  },
+  {
+    id: 'pulp',
+    label: 'Pulp Chamber',
+    tissue: 'Neurovascular core',
+    color: '#ff6f87',
+    anchor: [50, 27],
+    detail: 'The coronal neurovascular core holding odontoblasts, blood vessels, and nerves. Inflammation here (pulpitis) drives toothache; irreversible pulpitis with lingering pain is the classic indication for root canal treatment.',
+    points: ['Houses odontoblasts, vessels, and nerves', 'Inflammation produces reversible or irreversible pulpitis', 'Access cavity must respect the chamber roof and horns'],
+    related: ['Pulpitis', 'Endodontics', 'Pain diagnosis']
+  },
+  {
+    id: 'root',
+    label: 'Root Canal',
+    tissue: 'Endodontic space',
+    color: '#ff96a6',
+    anchor: [50, 62],
+    detail: 'The continuation of the pulp through the root to the apical foramen. Endodontic therapy cleans, shapes, and obturates this canal; missed canals and length control errors are leading causes of treatment failure.',
+    points: ['Carries pulp tissue toward the apex', 'Accessory and curved canals are common', 'Length control protects the apical seal'],
+    related: ['Working length', 'Irrigation', 'Obturation']
+  },
+  {
+    id: 'cementum',
+    label: 'Cementum',
+    tissue: 'Mineralized root surface',
+    color: '#d8b075',
+    anchor: [66, 58],
+    detail: 'A thin, bone-like mineralized layer covering the root dentin. It anchors the periodontal ligament fibers (Sharpey fibers) and becomes vulnerable to root caries when gingival recession exposes it.',
+    points: ['Bone-like layer covering root dentin', 'Anchors Sharpey fibers of the PDL', 'Exposed surfaces are prone to root caries'],
+    related: ['Root caries', 'Periodontium', 'Attachment loss']
+  },
+  {
+    id: 'periodontal',
+    label: 'Periodontal Ligament',
+    tissue: 'Fibrous suspensory sling',
+    color: '#46d6cc',
+    anchor: [70, 70],
+    detail: 'The fibrous, vascular ligament suspending the tooth in its socket. It absorbs occlusal load, supplies proprioception, and its radiographic widening can signal trauma, inflammation, or occlusal overload.',
+    points: ['Suspends the tooth and absorbs occlusal forces', 'Provides proprioception during function', 'Radiographic widening flags trauma or overload'],
+    related: ['Periapical lesions', 'Mobility', 'Periodontitis']
+  },
+  {
+    id: 'apex',
+    label: 'Apical Foramen',
+    tissue: 'Neurovascular gateway',
+    color: '#ffd166',
+    anchor: [50, 92],
+    detail: 'The opening at the root tip where vessels and nerves enter the pulp. It is the apical limit for endodontic instrumentation and the focus of periapical (peri-radicular) disease.',
+    points: ['Entry point for pulpal vessels and nerves', 'Apical limit for instrumentation and obturation', 'Center of periapical pathology'],
+    related: ['Apical periodontitis', 'Working length', 'Radiographic apex']
+  }
 ];
+
+// Inline, individually highlightable cross-section so each layer can light up,
+// dim its neighbours, and stay anatomically legible. viewBox is 320 x 540.
+const toothLayerPaths = {
+  bone: 'M34 250 C34 232 48 224 70 224 L118 224 C112 260 110 330 120 392 C124 432 134 470 150 502 L70 502 C46 502 34 488 34 466 Z M286 250 C286 232 272 224 250 224 L202 224 C208 260 210 330 200 392 C196 432 186 470 170 502 L250 502 C274 502 286 488 286 466 Z',
+  gingiva: 'M40 256 C40 228 62 216 98 216 C124 216 132 230 160 230 C188 230 196 216 222 216 C258 216 280 228 280 256 L280 276 C238 268 198 264 160 264 C122 264 82 268 40 276 Z',
+  pdl: 'M124 226 C116 250 110 306 119 368 C125 430 142 480 160 514 C178 480 195 430 201 368 C210 306 204 250 196 226 Z',
+  cementum: 'M129 228 C122 250 117 304 125 365 C131 426 147 476 160 508 C173 476 189 426 195 365 C203 304 198 250 191 228 Z',
+  dentin: 'M188 232 C194 206 197 160 196 118 C194 82 180 58 160 56 C140 58 126 82 124 118 C123 160 126 206 132 232 C127 250 123 302 130 362 C135 422 148 472 160 502 C172 472 185 422 190 362 C197 302 193 250 188 232 Z',
+  enamel: 'M160 44 C188 46 206 74 208 116 C209 160 204 206 196 234 L124 234 C116 206 111 160 112 116 C114 74 132 46 160 44 Z',
+  pulp: 'M160 96 C149 98 144 120 144 152 C144 196 146 244 150 300 L170 300 C174 244 176 196 176 152 C176 120 171 98 160 96 Z',
+  canal: 'M150 300 C152 360 156 420 160 470 C164 420 168 360 170 300 Z'
+};
+
+// Which painted shapes glow when a structure is selected.
+const toothHighlightFor = {
+  crown: ['enamel'],
+  enamel: ['enamel'],
+  dentin: ['dentin'],
+  pulp: ['pulp'],
+  root: ['canal'],
+  cementum: ['cementum'],
+  periodontal: ['pdl'],
+  apex: ['apex']
+};
 
 const topicTabs = [
   { id: 'overview', label: 'Overview', body: 'Generate the core definition, boundaries of the topic, prerequisite concepts, and the minimum facts a dental student must not miss.' },
@@ -465,6 +607,102 @@ function RingProgress({ value, label, className = '' }) {
       <strong>{value}%</strong>
       <span>{label}</span>
     </div>
+  );
+}
+
+// Interactive anatomical cross-section. Each tissue is its own SVG path so the
+// selected layer glows, neighbours dim, and clicking a layer drives the lesson.
+function InteractiveTooth({ selected, onSelect }) {
+  const active = toothHighlightFor[selected] || [];
+  const dimming = active.length > 0;
+  const structure = anatomyStructures.find((item) => item.id === selected) || anatomyStructures[0];
+  const layerClass = (name) =>
+    `tooth-layer tooth-${name}${active.includes(name) ? ' is-active' : dimming ? ' is-dim' : ''}`;
+  const apexActive = selected === 'apex';
+
+  return (
+    <div className="tooth-stage interactive">
+      <span className="tooth-callout">
+        <em style={{ background: structure.color }} />
+        {structure.label}
+      </span>
+      <div className="tooth-frame">
+        <svg viewBox="0 0 320 540" className="tooth-svg" role="img" aria-label={`Tooth cross-section highlighting ${structure.label}`}>
+          <defs>
+            <radialGradient id="toothGlow" cx="50%" cy="32%" r="60%">
+              <stop offset="0%" stopColor={structure.color} stopOpacity="0.55" />
+              <stop offset="62%" stopColor={structure.color} stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <rect x="0" y="0" width="320" height="540" fill="url(#toothGlow)" />
+          <path className={layerClass('bone')} d={toothLayerPaths.bone} />
+          <path className={layerClass('gingiva')} d={toothLayerPaths.gingiva} />
+          <path className={layerClass('pdl')} d={toothLayerPaths.pdl} onClick={() => onSelect('periodontal')} />
+          <path className={layerClass('cementum')} d={toothLayerPaths.cementum} onClick={() => onSelect('cementum')} />
+          <path className={layerClass('dentin')} d={toothLayerPaths.dentin} onClick={() => onSelect('dentin')} />
+          <path className={layerClass('enamel')} d={toothLayerPaths.enamel} onClick={() => onSelect('enamel')} />
+          <path className={layerClass('pulp')} d={toothLayerPaths.pulp} onClick={() => onSelect('pulp')} />
+          <path className={layerClass('canal')} d={toothLayerPaths.canal} onClick={() => onSelect('root')} />
+          <circle
+            className={`tooth-layer tooth-apex${apexActive ? ' is-active' : dimming ? ' is-dim' : ''}`}
+            cx="160"
+            cy="510"
+            r="9"
+            onClick={() => onSelect('apex')}
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// Dependency-free SVG radar of per-topic mastery so progress reads as a graph,
+// not just a row of meters.
+function MasteryRadar({ domains }) {
+  const items = (domains || []).slice(0, 6);
+  if (items.length < 3) return null;
+  const count = items.length;
+  const cx = 110;
+  const cy = 110;
+  const radius = 80;
+  const angleFor = (index) => (Math.PI * 2 * index) / count - Math.PI / 2;
+  const pointAt = (index, distance) => [
+    cx + Math.cos(angleFor(index)) * distance,
+    cy + Math.sin(angleFor(index)) * distance
+  ];
+  const rings = [0.25, 0.5, 0.75, 1];
+  const valuePoints = items
+    .map((domain, index) => pointAt(index, radius * Math.max(0.08, Math.min(1, domain.score / 100))).join(','))
+    .join(' ');
+
+  return (
+    <svg className="radar-chart" viewBox="0 0 220 220" role="img" aria-label="Mastery radar by topic">
+      {rings.map((ring, ringIndex) => (
+        <polygon
+          key={ring}
+          className={ringIndex === rings.length - 1 ? 'radar-ring radar-ring-edge' : 'radar-ring'}
+          points={items.map((_, index) => pointAt(index, radius * ring).join(',')).join(' ')}
+        />
+      ))}
+      {items.map((_, index) => {
+        const [x, y] = pointAt(index, radius);
+        return <line key={`spoke-${index}`} className="radar-spoke" x1={cx} y1={cy} x2={x} y2={y} />;
+      })}
+      <polygon className="radar-area" points={valuePoints} />
+      {items.map((domain, index) => {
+        const [x, y] = pointAt(index, radius * Math.max(0.08, Math.min(1, domain.score / 100)));
+        return <circle key={`dot-${domain.topic}`} className="radar-dot" cx={x} cy={y} r="3.4" />;
+      })}
+      {items.map((domain, index) => {
+        const [lx, ly] = pointAt(index, radius + 20);
+        const anchor = lx > cx + 6 ? 'start' : lx < cx - 6 ? 'end' : 'middle';
+        return (
+          <text key={`label-${domain.topic}`} className="radar-label" x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle">
+            {domain.topic.split(' ')[0]}
+          </text>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -508,24 +746,22 @@ function ModeWorkspace({ page, studySet, busy, submitStudy, createArtifact, navi
           <h3>{workflow.title}</h3>
           <span>{workflow.subtitle}</span>
         </div>
-        <button type="button" onClick={() => submitStudy(workflow.prompt)} disabled={!studySet || !!busy}>
-          Start workflow
+        <button type="button" className="primary-chip" onClick={() => submitStudy(workflow.prompt)} disabled={!studySet || !!busy}>
+          {workflow.cta}
         </button>
       </div>
-      <div className="mode-workflow-grid">
-        {workflow.cards.map(([title, copy]) => (
-          <article key={title}>
-            <strong>{title}</strong>
-            <span>{copy}</span>
-          </article>
-        ))}
-      </div>
-      <div className="mode-action-strip">
-        <button type="button" onClick={() => createArtifact('conceptMap')} disabled={!studySet || !!busy}>Concept map</button>
-        <button type="button" onClick={() => createArtifact('weakQuiz')} disabled={!studySet || !!busy}>Weak quiz</button>
-        <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>Flashcards</button>
-        <button type="button" onClick={() => navigate('library')}>Source library</button>
-      </div>
+      {workflow.starters && (
+        <div className="mode-starters">
+          <span className="mode-starters-label">Or try a question</span>
+          <div className="mode-starter-chips">
+            {workflow.starters.map((starter) => (
+              <button key={starter} type="button" onClick={() => submitStudy(starter)} disabled={!studySet || !!busy}>
+                {starter}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -589,6 +825,15 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
     label: domain.topic,
     score: Math.max(58, Math.min(92, domain.score + 12 - index * 4))
   }));
+  const weakAverage = Math.round(weakAreas.reduce((total, area) => total + area.score, 0) / Math.max(1, weakAreas.length));
+  const activityMetrics = [
+    { label: 'Questions', value: chat.filter((item) => item.role === 'user').length },
+    { label: 'Answers', value: chat.filter((item) => item.role === 'assistant').length },
+    { label: 'Cards', value: flashcards.length },
+    { label: 'Due', value: masteryModel.dueCards.length }
+  ];
+  const activityPeak = Math.max(1, ...activityMetrics.map((metric) => metric.value));
+  const hasActivity = activityMetrics.some((metric) => metric.value > 0);
 
   function runAction(action) {
     setSelectedIntent(`${action.title}: ${action.prompt}`);
@@ -611,7 +856,7 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
         <label className="command-search">
           <Search size={17} />
           <input
-            placeholder="Search topics, questions, cases..."
+            placeholder="Ask about any dental topic, then press Enter"
             onKeyDown={(event) => {
               if (event.key === 'Enter' && event.currentTarget.value.trim()) {
                 submitStudy(`Teach me about ${event.currentTarget.value.trim()} with exam pearls, clinical relevance, and common mistakes.`);
@@ -620,42 +865,24 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
             }}
           />
         </label>
-        <div className="mode-switch" aria-label="Study role">
-          <span>Study Mode</span>
-          <button type="button" className="active">Professor</button>
-          <button type="button" onClick={() => navigate('test')}>Examiner</button>
-        </div>
-        <div className="top-icons">
-          <button type="button" title="Notifications"><Bell size={17} /></button>
-          <button type="button" title="Settings"><Settings size={17} /></button>
-        </div>
+        {hasSource && masteryModel.dueCards.length > 0 && (
+          <button type="button" className="topbar-due" onClick={() => navigate('mastery')}>
+            <Bell size={16} />
+            {masteryModel.dueCards.length} due
+          </button>
+        )}
       </div>
 
       <div className="command-greeting">
         <div>
           <h2>Good morning, {firstName}.</h2>
-          <p>What would you like to master today?</p>
+          <p>{hasSource ? 'Pick up where you left off, or explore the tooth model below.' : 'Add a study source to begin.'}</p>
         </div>
         <button type="button" onClick={() => navigate(studySet ? 'answer' : 'library')}>
           <Sparkles size={17} />
-          {studySet ? 'Continue source' : 'Add study source'}
+          {studySet ? 'Continue studying' : 'Add study source'}
         </button>
       </div>
-
-      {!hasSource && (
-        <div className="command-actions intake-actions">
-          {commandActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button key={action.title} type="button" onClick={() => runAction(action)}>
-                <span><Icon size={23} /></span>
-                <strong>{action.title}</strong>
-                <small>{action.subtitle}</small>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {!hasSource && (
         <SourceIntakePanel
@@ -669,77 +896,16 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
       {hasSource && (
         <div className="active-source-strip">
           <FileText size={16} />
-          <span>Building from: {sourceName}</span>
+          <span>Studying from {sourceName}</span>
         </div>
       )}
 
-      {hasSource && (
-        <article className="focus-picker glass-panel">
-          <div className="panel-title">
-            <div>
-              <strong>Choose the study focus</strong>
-              <span>Actions use the selected subject. Or let the professor suggest focus areas from the source.</span>
-            </div>
-            <button type="button" onClick={() => submitStudy('Inspect this source and suggest 3 high-yield dental study focus areas. Ask me which one to use next.')} disabled={!studySet || !!busy}>
-              AI choose
-            </button>
-          </div>
-          <div className="subject-picker compact">
-            {dentalSubjects.map((subject) => (
-              <button key={subject} type="button" className={selectedSubject === subject ? 'active' : ''} onClick={() => setSelectedSubject(subject)}>
-                {subject}
-              </button>
-            ))}
-          </div>
-        </article>
-      )}
-
-      {hasSource && <div className="command-layout">
-        <div className="command-main">
-          <div className="command-actions">
-            {commandActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button key={action.title} type="button" onClick={() => runAction(action)}>
-                  <span><Icon size={23} /></span>
-                  <strong>{action.title}</strong>
-                  <small>{action.subtitle}</small>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="analytics-panel glass-panel">
-            <div className="panel-title">
-              <strong>Your Progress</strong>
-              <span>View all</span>
-            </div>
-            <RingProgress value={Math.max(12, masteryModel.average)} label="Overall progress" />
-            <div className="trend-card">
-              <strong>Progress Over Time</strong>
-              <div className="trend-bars">
-                {[28, 41, 36, 52, 67, 58, 77, 90].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}
-              </div>
-              <div className="trend-labels"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span></div>
-            </div>
-            <div className="subject-stack">
-              <strong>Top Subjects</strong>
-              {topSubjects.map((subject) => (
-                <div key={subject.label} className="subject-row">
-                  <span>{subject.label}</span>
-                  <meter min="0" max="100" value={subject.score}></meter>
-                  <em>{subject.score}%</em>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
+      {hasSource && <div className="dash-feature-grid">
         <article className="anatomy-panel glass-panel">
           <div className="panel-title">
             <div>
               <strong>Interactive Tooth Anatomy</strong>
-              <span>Explore every part in 3D-style layers</span>
+              <span>Tap any layer of the cross-section to study it</span>
             </div>
             <button type="button" onClick={() => setSelectedStructure('dentin')}>Reset</button>
           </div>
@@ -747,17 +913,22 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
             <div className="anatomy-tabs">
               {anatomyStructures.map((item) => (
                 <button key={item.id} type="button" className={selectedStructure === item.id ? 'active' : ''} onClick={() => setSelectedStructure(item.id)}>
-                  <Layers size={15} />
+                  <span className="layer-swatch" style={{ background: item.color }} />
                   {item.label}
                 </button>
               ))}
             </div>
-            <div className="tooth-stage">
-              <img src="/dentalos/tooth-anatomy.svg" alt="Cross-section illustration of molar tooth anatomy" />
-              <span className={`anatomy-hotspot hotspot-${structure.id}`}>{structure.label}</span>
-            </div>
+            <React.Suspense fallback={<div className="tooth3d-stage loading"><span>Loading 3D model…</span></div>}>
+              <Tooth3D
+                selected={selectedStructure}
+                onSelect={setSelectedStructure}
+                label={structure.label}
+                color={structure.color}
+              />
+            </React.Suspense>
             <div className="structure-card">
               <strong>{structure.label}</strong>
+              <span className="structure-tissue">{structure.tissue}</span>
               <p>{structure.detail}</p>
               <h4>Key Points</h4>
               {structure.points.map((point) => <span key={point}><CheckCircle2 size={14} />{point}</span>)}
@@ -772,137 +943,72 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
             </div>
           </div>
         </article>
+
+        <div className="analytics-panel stacked glass-panel">
+            <div className="panel-title">
+              <strong>Your Progress</strong>
+              <button type="button" className="panel-link" onClick={() => navigate('mastery')}>View all</button>
+            </div>
+            <RingProgress value={Math.max(12, masteryModel.average)} label="Overall progress" />
+            <div className="trend-card">
+              <strong>This study set</strong>
+              {hasActivity ? (
+                <>
+                  <div className="trend-bars">
+                    {activityMetrics.map((metric) => (
+                      <i
+                        key={metric.label}
+                        style={{ height: `${Math.max(6, Math.round((metric.value / activityPeak) * 100))}%` }}
+                        title={`${metric.label}: ${metric.value}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="trend-labels">
+                    {activityMetrics.map((metric) => (
+                      <span key={metric.label}>{metric.label} {metric.value}</span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="trend-empty">Ask questions and build cards to see your activity here.</p>
+              )}
+            </div>
+            <div className="radar-card">
+              <strong>Topic mastery map</strong>
+              <MasteryRadar domains={masteryModel.domains} />
+            </div>
+        </div>
       </div>}
 
-      {hasSource && <div className="command-lower">
-        <article className="case-simulator glass-panel">
-          <div className="panel-title">
-            <div><strong>Clinical Case Simulator</strong><span>Learn by solving real-life cases</span></div>
-            <button type="button" onClick={() => createArtifact('clinicalCase')} disabled={!studySet || !!busy}>Generate</button>
+      {hasSource && <article className="rad-panel glass-panel">
+        <div className="panel-title">
+          <div>
+            <strong>Radiograph Reader</strong>
+            <span>Pan, zoom, and tap findings to learn how to read a periapical x-ray</span>
           </div>
-          <div className="case-steps">
-            {caseSteps.map((step, index) => (
-              <button type="button" key={step} className={activeCaseStep === index ? 'active' : ''} onClick={() => setActiveCaseStep(index)}>
-                {index + 1}. {step}
+        </div>
+        <React.Suspense fallback={<div className="rad-viewer loading"><span>Loading radiograph…</span></div>}>
+          <Radiology onStudy={submitStudy} />
+        </React.Suspense>
+      </article>}
+
+      {hasSource && <div className="dash-tools">
+        <div className="dash-tools-head">
+          <strong>Study tools</strong>
+          <span>Generate grounded material from your source</span>
+        </div>
+        <div className="command-actions">
+          {commandActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button key={action.title} type="button" onClick={() => runAction(action)} disabled={!!busy}>
+                <span><Icon size={22} /></span>
+                <strong>{action.title}</strong>
+                <small>{action.subtitle}</small>
               </button>
-            ))}
-          </div>
-          <div className="case-body">
-            <img src="/dentalos/patient-avatar.svg" alt="Dental case patient avatar" />
-            <div>
-              <h3>{caseStageCopy[activeCaseStep][0]}</h3>
-              <p>{caseStageCopy[activeCaseStep][1]}</p>
-              <p><strong>Current focus:</strong> {focusSubject}</p>
-            </div>
-            <div className="case-actions">
-              <button type="button" onClick={() => submitStudy(`Give hints for the ${caseSteps[activeCaseStep]} stage of a ${focusSubject} clinical case. Do not reveal the final answer.`)}>Ask for hints</button>
-              <button type="button" onClick={() => createArtifact('differentialDiagnosis')}>Differential diagnosis</button>
-              <button type="button" onClick={() => submitStudy(`For the ${caseSteps[activeCaseStep]} stage, list the next questions a dental student should ask and why.`)}>What to ask next?</button>
-            </div>
-          </div>
-          <button type="button" className="primary-chip" onClick={() => createArtifact('clinicalCase')} disabled={!studySet || !!busy}>Next step</button>
-        </article>
-
-        <article className="xray-panel glass-panel">
-          <div className="panel-title">
-            <div><strong>X-Ray Interpreter</strong><span>Step-by-step interpretation</span></div>
-            <button type="button" onClick={() => createArtifact('radiologyChecklist')} disabled={!studySet || !!busy}>Checklist</button>
-          </div>
-          <div className="xray-body">
-            <img src="/dentalos/bitewing-xray.svg" alt="Educational bitewing radiograph illustration" />
-            <div className="xray-checklist">
-              {xraySteps.map((item, index) => (
-                <button key={item} type="button" className={activeXrayStep === index ? 'active' : ''} onClick={() => setActiveXrayStep(index)}>
-                  {index + 1}. {item}<CheckCircle2 size={13} />
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="pathology-findings">
-            <strong>{xraySteps[activeXrayStep]} checklist</strong>
-            <p>Use this step to describe observable radiographic signs, then ask for differential diagnosis guidance. Final clinical diagnosis requires dentist review.</p>
-          </div>
-        </article>
-
-        <article className="topic-panel glass-panel">
-          <div className="topic-nav">
-            {topicTabs.map((tab) => <button key={tab.id} type="button" className={selectedTab === tab.id ? 'active' : ''} onClick={() => setSelectedTab(tab.id)}>{tab.label}</button>)}
-          </div>
-          <div className="topic-heading">
-            <h3>{selectedSubject || 'Source'} Knowledge Engine</h3>
-            <div className="level-switch">
-              {explanationLevels.map((level, index) => <button key={level} type="button" title={level} className={learningLevel === index + 1 ? 'active' : ''} onClick={() => setLearningLevel(index + 1)}>{index + 1}</button>)}
-            </div>
-          </div>
-          <div className="topic-content">
-            <strong>{explanationLevels[learningLevel - 1]} explanation</strong>
-            <p>{topicTab.body}</p>
-          </div>
-          <div className="treatment-path">
-            {treatmentSteps.map((step, index) => (
-              <button key={step} type="button" className={activeTreatmentStep === index ? 'active' : ''} onClick={() => setActiveTreatmentStep(index)}>
-                <ShieldCheck size={16} />{step}
-              </button>
-            ))}
-          </div>
-          <div className="protocol-note">
-            <strong>{treatmentSteps[activeTreatmentStep]}</strong>
-            <span>Ask the protocol engine to expand this section with source-grounded criteria, materials, contraindications, complications, and follow-up.</span>
-          </div>
-          <div className="topic-actions">
-            <button type="button" onClick={() => createArtifact('differentialDiagnosis')} disabled={!studySet || !!busy}>Differential diagnosis</button>
-            <button type="button" onClick={() => createArtifact('radiologyChecklist')} disabled={!studySet || !!busy}>Radiographic findings</button>
-            <button type="button" onClick={() => createArtifact('examinerQuestions')} disabled={!studySet || !!busy}>Exam pearls</button>
-          </div>
-        </article>
-      </div>}
-
-      {hasSource && <div className="command-bottom">
-        <article className="flash-panel glass-panel">
-          <div className="panel-title"><strong>Flashcards</strong><span>{flashcards.length ? `1/${flashcards.length}` : 'Create cards'}</span></div>
-          <div className={previewCardRevealed ? 'flash-preview revealed' : 'flash-preview'} role="button" tabIndex={0} onClick={() => setPreviewCardRevealed((value) => !value)}>
-            <strong>{previewCard?.question || 'No real cards yet. Generate source-grounded flashcards first.'}</strong>
-            <span>{previewCardRevealed && previewCard ? previewCard.answer : 'Click to reveal answer'}</span>
-          </div>
-          <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>Build cards</button>
-        </article>
-
-        <article className="mcq-panel glass-panel">
-          <div className="panel-title"><strong>MCQ Practice</strong><span><Timer size={14} /> Exam mode</span></div>
-          <p>{mcqData ? mcqData.question : 'No generated MCQ is loaded here yet. Generate an examiner set from the active source, then answer it in this panel.'}</p>
-          {mcqData?.options.map((option) => (
-            <button key={option.key} type="button" className={selectedMcq === option.key ? 'selected' : ''} onClick={() => setSelectedMcq(option.key)}>
-              {option.key}. {option.text}
-            </button>
-          ))}
-          {selectedMcq && <span className="mcq-feedback">Selected: {selectedMcq}. Use the examiner result below to compare your reasoning, not just the letter.</span>}
-          <button type="button" className="primary-chip" onClick={() => createArtifact('examinerQuestions')} disabled={!studySet || !!busy}>Generate MCQs</button>
-        </article>
-
-        <article className="weak-panel glass-panel">
-          <div className="panel-title"><strong>Weak Areas</strong><button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>Plan</button></div>
-          {weakAreas.map((area) => (
-            <div key={area.label} className="weak-row">
-              <span>{area.label}</span>
-              <meter min="0" max="100" value={area.score}></meter>
-              <em>{area.score}%</em>
-            </div>
-          ))}
-          <RingProgress value={45} label="Focus more" className="danger-ring" />
-        </article>
-
-        <article className="professor-panel glass-panel">
-          <div className="panel-title"><strong>AI Tutor</strong><span>Professor mode</span></div>
-          <div className="professor-message"><p>Ask a source-grounded professor question, then request tables, common mistakes, and exam pearls.</p></div>
-          <div className="professor-answer">
-            <strong>Expected answer structure</strong>
-            <p>Direct answer, diagnostic criteria, differentials, treatment protocol, complications, prognosis, and board-style traps. No critical information should be removed.</p>
-          </div>
-          <button type="button" onClick={() => submitStudy(`Explain ${focusSubject} with comparison tables where useful, diagnostic criteria, clinical clues, treatment logic, complications, prognosis, common mistakes, and exam pearls.`)} disabled={!studySet || !!busy}>
-            <Send size={16} />
-            Ask professor
-          </button>
-        </article>
+            );
+          })}
+        </div>
       </div>}
     </section>
   );
@@ -913,6 +1019,7 @@ function App() {
   const [studySet, setStudySet] = useState(null);
   const [mode, setMode] = useState('answer');
   const [page, setPage] = useState('dashboard');
+  const [radCaseId, setRadCaseId] = useState(null);
   const [message, setMessage] = useState('');
   const [textSourceTitle, setTextSourceTitle] = useState('');
   const [textSource, setTextSource] = useState('');
@@ -2102,7 +2209,7 @@ function App() {
             </div>
           </div>}
 
-          {page !== 'dashboard' && <section className="page-intro">
+          {page !== 'dashboard' && !RAD_PAGES.includes(page) && <section className="page-intro">
             <div className="page-icon">
               <ActivePageIcon size={20} />
             </div>
@@ -2111,41 +2218,6 @@ function App() {
               <p>{activePage.prompt}</p>
             </div>
           </section>}
-
-          {page !== 'dashboard' && <div className="quick-actions">
-            {modes.some((item) => item.id === page) && (
-              <button type="button" onClick={() => submitStudy(activePage.prompt, { speak: conversationMode })} disabled={!studySet || !!busy}>
-                Start {activePage.label}
-              </button>
-            )}
-            <button type="button" onClick={() => navigate('library')}>
-              Library
-            </button>
-            <button type="button" onClick={() => submitStudy('Summarize this source for a dental exam.', { speak: conversationMode })} disabled={!studySet || !!busy}>
-              Summarize source
-            </button>
-            <button type="button" onClick={() => submitStudy('Explain dental caries from this source in a clear study-friendly way.', { speak: conversationMode })} disabled={!studySet || !!busy}>
-              Explain caries
-            </button>
-            <button type="button" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
-              Make flashcards
-            </button>
-            <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>
-              Case study
-            </button>
-            <button type="button" onClick={() => createArtifact('osce')} disabled={!studySet || !!busy}>
-              OSCE station
-            </button>
-            <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
-              Rescue plan
-            </button>
-            <button type="button" onClick={() => createArtifact('mnemonics')} disabled={!studySet || !!busy}>
-              Mnemonics
-            </button>
-            <button type="button" onClick={() => submitStudy('Start a creative oral exam from this source. Ask useful questions and include answer rubrics.', { speak: conversationMode })} disabled={!studySet || !!busy}>
-              Start oral test
-            </button>
-          </div>}
 
           <div className="messages">
             {page === 'dashboard' ? (
@@ -2188,53 +2260,90 @@ function App() {
               </section>
             ) : page === 'library' ? (
               <section className="library-page">
-                <form className="upload-zone library-upload" onSubmit={uploadPdfs}>
-                  <Upload size={22} />
-                  <label htmlFor="pdfs">Upload dental PDFs</label>
-                  <input
-                    id="pdfs"
-                    type="file"
-                    accept="application/pdf"
-                    multiple
-                    onChange={(event) => setFiles(Array.from(event.target.files || []))}
-                  />
-                  <button type="submit" disabled={!files.length || busy === 'upload'}>
-                    {busy === 'upload' ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-                    Index PDFs
-                  </button>
-                </form>
-                <form className="upload-zone text-source-zone" onSubmit={indexTextSource}>
-                  <FileText size={22} />
-                  <label htmlFor="text-source">Index pasted study text</label>
-                  <input
-                    id="text-source-title"
-                    value={textSourceTitle}
-                    onChange={(event) => setTextSourceTitle(event.target.value)}
-                    placeholder="Title, e.g. Caries prevention lecture"
-                  />
-                  <textarea
-                    id="text-source"
-                    rows={7}
-                    value={textSource}
-                    onChange={(event) => setTextSource(event.target.value)}
-                    placeholder="Paste lecture notes, a rubric, a professor handout, or a clinic protocol..."
-                  />
-                  <button type="submit" disabled={textSource.trim().length < 80 || busy === 'upload'}>
-                    {busy === 'upload' ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-                    Index Text
-                  </button>
-                </form>
+                <div className="library-hero">
+                  <div>
+                    <p>Source Library</p>
+                    <h3>{studySet ? 'Your study set is indexed and ready' : 'Add the material you want to study from'}</h3>
+                    <span>
+                      {studySet
+                        ? `${sourceCountLabel} active. Everything DentalOS generates is grounded in this material.`
+                        : 'Upload lecture PDFs or paste notes, rubrics, and protocols. The tutor only answers from what you add here.'}
+                    </span>
+                  </div>
+                  {studySet && (
+                    <button type="button" className="danger-action" onClick={clearSession}>Remove source</button>
+                  )}
+                </div>
+
+                <div className="library-intake">
+                  <form
+                    className={dragActive ? 'upload-zone library-upload drag' : 'upload-zone library-upload'}
+                    onSubmit={uploadPdfs}
+                    onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(event) => { event.preventDefault(); setDragActive(false); uploadSelectedPdfs(event.dataTransfer.files); }}
+                  >
+                    <div className="upload-icon"><Upload size={24} /></div>
+                    <label htmlFor="pdfs">Drop dental PDFs here, or browse</label>
+                    <p className="upload-hint">Lectures, textbook chapters, handouts, review sheets. Up to 8 files.</p>
+                    <input
+                      id="pdfs"
+                      type="file"
+                      accept="application/pdf"
+                      multiple
+                      onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                    />
+                    {files.length > 0 && (
+                      <p className="upload-selected">{files.length} file{files.length > 1 ? 's' : ''} ready: {files.map((file) => file.name).join(', ')}</p>
+                    )}
+                    <button type="submit" disabled={!files.length || busy === 'upload'}>
+                      {busy === 'upload' ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                      Index {files.length || ''} PDF{files.length > 1 ? 's' : ''}
+                    </button>
+                  </form>
+
+                  <form className="upload-zone text-source-zone" onSubmit={indexTextSource}>
+                    <div className="upload-icon"><FileText size={24} /></div>
+                    <label htmlFor="text-source">Paste study text</label>
+                    <input
+                      id="text-source-title"
+                      value={textSourceTitle}
+                      onChange={(event) => setTextSourceTitle(event.target.value)}
+                      placeholder="Title, e.g. Caries prevention lecture"
+                    />
+                    <textarea
+                      id="text-source"
+                      rows={6}
+                      value={textSource}
+                      onChange={(event) => setTextSource(event.target.value)}
+                      placeholder="Paste lecture notes, a rubric, a professor handout, or a clinic protocol..."
+                    />
+                    <div className="textarea-meta">
+                      <span>{textSource.trim().length} characters</span>
+                      <span className={textSource.trim().length >= 80 ? 'ok' : ''}>min 80</span>
+                    </div>
+                    <button type="submit" disabled={textSource.trim().length < 80 || busy === 'upload'}>
+                      {busy === 'upload' ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                      Index text
+                    </button>
+                  </form>
+                </div>
+
                 <div className="kit-section">
                   <div className="section-title">
                     <Library size={18} />
-                    <h3>Indexed Material</h3>
+                    <h3>Indexed material</h3>
                   </div>
                   {studySet ? (
                     <div className="file-list">
                       {studySet.files.map((file) => (
-                        <div key={file.fileId}>
-                          <FileText size={17} />
-                          <span>{file.originalName}</span>
+                        <div key={file.fileId} className="file-row">
+                          <span className="file-ic"><FileText size={17} /></span>
+                          <span className="file-name">{file.originalName}</span>
+                          <span className={file.sourceType === 'text' ? 'file-badge text' : 'file-badge pdf'}>
+                            {file.sourceType === 'text' ? 'Text' : 'PDF'}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -2242,6 +2351,29 @@ function App() {
                     <p className="muted">Upload PDFs or paste text to create a study set.</p>
                   )}
                 </div>
+
+                {studySet && (
+                  <div className="kit-section">
+                    <div className="section-title">
+                      <Sparkles size={18} />
+                      <h3>What would you like to do next?</h3>
+                    </div>
+                    <div className="next-grid">
+                      <button type="button" onClick={() => navigate('summary')}>
+                        <BookOpen size={20} /><strong>Summary</strong><small>High-yield recap</small>
+                      </button>
+                      <button type="button" onClick={() => createArtifact('flashcards')} disabled={!!busy}>
+                        <BookmarkPlus size={20} /><strong>Flashcards</strong><small>Active recall</small>
+                      </button>
+                      <button type="button" onClick={() => navigate('test')}>
+                        <FileQuestion size={20} /><strong>Oral test</strong><small>Examiner mode</small>
+                      </button>
+                      <button type="button" onClick={() => navigate('engines')}>
+                        <Brain size={20} /><strong>Engines</strong><small>Specialized tools</small>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             ) : page === 'mastery' ? (
               <section className="mastery-page">
@@ -2250,10 +2382,13 @@ function App() {
                     <p>Adaptive Dentistry Engine</p>
                     <h3>{masteryModel.average}% readiness</h3>
                     <span>{masteryModel.weakest.map((item) => item.topic).join(' and ') || 'Upload material to start the map'} are least covered right now.</span>
+                    <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
+                      Build rescue plan
+                    </button>
                   </div>
-                  <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
-                    Build rescue plan
-                  </button>
+                  <div className="mastery-hero-radar">
+                    <MasteryRadar domains={masteryModel.domains} />
+                  </div>
                 </div>
                 <div className="mastery-grid">
                   {masteryModel.domains.map((domain) => (
@@ -2317,43 +2452,40 @@ function App() {
               </section>
             ) : page === 'engines' ? (
               <section className="engines-page">
-                <div className="mastery-hero engines-hero">
-                  <div>
-                    <p>DentalOS Command Center</p>
-                    <h3>Specialized engines for learning, exams, clinical reasoning, and professor workflows.</h3>
-                    <span>Each engine preserves critical dental detail and restructures it into tables, rubrics, pathways, charts, and review loops.</span>
-                  </div>
-                  <button type="button" onClick={() => createArtifact('knowledgeGap')} disabled={!studySet || !!busy}>
-                    Run gap scan
-                  </button>
+                <div className="engines-hero-bar">
+                  <p>Engines</p>
+                  <h3>Pick a tool. It turns your source into one focused study output.</h3>
                 </div>
-                <div className="engine-grid">
-                  {dentalosEngines.map((engine) => {
-                    const Icon = engine.icon;
-                    return (
-                      <article key={engine.id} className="engine-card">
-                        <Icon size={22} />
-                        <strong>{engine.title}</strong>
-                        <span>{engine.copy}</span>
-                        <button type="button" onClick={() => createArtifact(engine.id)} disabled={!studySet || !!busy}>
-                          Run engine
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-                <div className="kit-section">
-                  <div className="section-title">
-                    <CheckCircle2 size={18} />
-                    <h3>Safety Contract</h3>
+                {engineGroups.map((group) => (
+                  <div key={group.key} className="engine-group">
+                    <div className="engine-group-head">
+                      <strong>{group.key}</strong>
+                      <span>{group.caption}</span>
+                    </div>
+                    <div className="engine-grid">
+                      {dentalosEngines.filter((engine) => engine.group === group.key).map((engine) => {
+                        const Icon = engine.icon;
+                        return (
+                          <article key={engine.id} className="engine-card">
+                            <div className="engine-card-top">
+                              <span className="engine-ic"><Icon size={20} /></span>
+                              <span className="engine-produces">{engine.produces}</span>
+                            </div>
+                            <strong>{engine.title}</strong>
+                            <span>{engine.copy}</span>
+                            <button type="button" onClick={() => createArtifact(engine.id)} disabled={!studySet || !!busy}>
+                              Run engine
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="safety-grid">
-                    <span>No autonomous diagnosis</span>
-                    <span>No autonomous treatment planning</span>
-                    <span>Source-grounded educational support</span>
-                    <span>Dentist review for future clinical outputs</span>
-                  </div>
-                </div>
+                ))}
+                <p className="safety-note">
+                  <ShieldCheck size={14} />
+                  Educational support only. Source-grounded, with no autonomous diagnosis or treatment planning.
+                </p>
               </section>
             ) : page === 'clinic' ? (
               <section className="clinic-page">
@@ -2366,27 +2498,31 @@ function App() {
                 </div>
                 <div className="clinic-grid">
                   <article>
-                    <ClipboardList size={22} />
+                    <span className="clinic-ic"><ClipboardList size={22} /></span>
                     <strong>Professor OSCE Builder</strong>
                     <span>Create stations, patient scripts, examiner prompts, rubrics, and remediation loops from course material.</span>
+                    <small className="produces">Produces: OSCE station + rubric</small>
                     <button type="button" onClick={() => createArtifact('osce')} disabled={!studySet || !!busy}>Generate OSCE</button>
                   </article>
                   <article>
-                    <CheckCircle2 size={22} />
+                    <span className="clinic-ic"><CheckCircle2 size={22} /></span>
                     <strong>Clinical Observation Checklist</strong>
                     <span>Turn topics into observable signs, evidence requirements, red flags, and teaching feedback.</span>
+                    <small className="produces">Produces: observation checklist</small>
                     <button type="button" onClick={() => createArtifact('clinicalVisionChecklist')} disabled={!studySet || !!busy}>Build checklist</button>
                   </article>
                   <article>
-                    <Brain size={22} />
+                    <span className="clinic-ic"><Brain size={22} /></span>
                     <strong>Adaptive Remediation</strong>
                     <span>Convert weak answers into targeted drills, confidence checks, and spaced review plans.</span>
+                    <small className="produces">Produces: rescue study plan</small>
                     <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>Create plan</button>
                   </article>
                   <article>
-                    <GraduationCap size={22} />
+                    <span className="clinic-ic"><GraduationCap size={22} /></span>
                     <strong>Professor Studio</strong>
                     <span>Generate objectives, rubrics, OSCE stations, weak-concept maps, and remediation activities.</span>
+                    <small className="produces">Produces: full teaching pack</small>
                     <button type="button" onClick={() => createArtifact('professorStudio')} disabled={!studySet || !!busy}>Open studio</button>
                   </article>
                 </div>
@@ -2460,23 +2596,39 @@ function App() {
                   </div>
                   {flashcards.length ? (
                     <div className="flash-study">
-                      <article className={revealedCards[activeCard.id] ? 'flash-trainer revealed' : 'flash-trainer'}>
+                      <article className="flash-trainer">
                         <div className="flash-trainer-top">
                           <span>Card {activeCardIndex + 1} of {flashcards.length}</span>
                           <strong>{masteryModel.dueCards.length} due now</strong>
                         </div>
-                        <h4>{activeCard.question}</h4>
-                        {revealedCards[activeCard.id] ? (
-                          <p>{activeCard.answer}</p>
-                        ) : (
-                          <button type="button" className="reveal-card" onClick={() => toggleCard(activeCard.id)}>
-                            Reveal answer
-                          </button>
-                        )}
+                        <div
+                          className={revealedCards[activeCard.id] ? 'flip-card is-flipped' : 'flip-card'}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleCard(activeCard.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              toggleCard(activeCard.id);
+                            }
+                          }}
+                        >
+                          <div className="flip-inner">
+                            <div className="flip-face flip-front">
+                              <span className="flip-tag">Question</span>
+                              <h4>{activeCard.question}</h4>
+                              <small>Click or press space to flip</small>
+                            </div>
+                            <div className="flip-face flip-back">
+                              <span className="flip-tag">Answer</span>
+                              <p>{activeCard.answer}</p>
+                            </div>
+                          </div>
+                        </div>
                         <div className="trainer-actions">
                           <button type="button" onClick={() => setActiveCardIndex((index) => Math.max(0, index - 1))}>Previous</button>
                           <button type="button" onClick={() => toggleCard(activeCard.id)}>
-                            {revealedCards[activeCard.id] ? 'Hide' : 'Show'}
+                            {revealedCards[activeCard.id] ? 'Show question' : 'Flip card'}
                           </button>
                           <button type="button" onClick={() => setActiveCardIndex((index) => (index + 1) % flashcards.length)}>Next</button>
                         </div>
@@ -2529,6 +2681,12 @@ function App() {
                   )}
                 </div>
               </section>
+            ) : page === 'cases' ? (
+              <CasesPage caseId={radCaseId} setCaseId={setRadCaseId} navigate={navigate} />
+            ) : page === 'radiology' ? (
+              <RadiologyPage caseId={radCaseId} navigate={navigate} />
+            ) : page === 'interpreter' ? (
+              <InterpreterPage caseId={radCaseId} setCaseId={setRadCaseId} />
             ) : visibleChat.length === 0 && !modes.some((modeItem) => modeItem.id === page) ? (
               <div className="empty-state">
                 <ActivePageIcon size={30} />

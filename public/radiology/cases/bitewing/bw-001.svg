@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 430" width="620" height="430">
+
+  <defs>
+    <radialGradient id="bone" cx="50%" cy="44%" r="80%">
+      <stop offset="0%" stop-color="#394954"/>
+      <stop offset="60%" stop-color="#212c35"/>
+      <stop offset="100%" stop-color="#10161c"/>
+    </radialGradient>
+    <linearGradient id="dentin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#aeb8bf"/>
+      <stop offset="100%" stop-color="#7c8893"/>
+    </linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0"/>
+      <feComposite operator="over" in2="SourceGraphic"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="0.6"/></filter>
+  </defs>
+  <rect width="620" height="430" fill="url(#bone)"/>
+<rect x="0" y="208" width="620" height="14" fill="#0e141a" opacity="0.5"/><g opacity="0.4" stroke="#5a6772" stroke-width="0.9" fill="none">
+    <path d="M20 60 L600 70"/><path d="M20 360 L600 350"/></g><g filter="url(#soft)">
+    <path d="M62 205 Q110 209 158 205
+    L129.2 55 Q110 50 90.8 55 Z" fill="url(#dentin)"/>
+    <path d="M62 205 Q110 211 158 205
+    L143.6 154 Q110 157 76.4 154 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M110 154 L110 82.00000000000001" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><g filter="url(#soft)">
+    <path d="M92 225 Q140 221 188 225
+    L159.2 375 Q140 380 120.8 375 Z" fill="url(#dentin)"/>
+    <path d="M92 225 Q140 219 188 225
+    L173.6 276 Q140 273 106.4 276 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M140 276 L140 348" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><g filter="url(#soft)">
+    <path d="M192 205 Q240 209 288 205
+    L259.2 55 Q240 50 220.8 55 Z" fill="url(#dentin)"/>
+    <path d="M192 205 Q240 211 288 205
+    L273.6 154 Q240 157 206.4 154 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M240 154 L240 82.00000000000001" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    <path d="M288 199 q-21.12 -3 0 -8" fill="#1b242b" opacity="0.85"/>
+  </g><g filter="url(#soft)">
+    <path d="M222 225 Q270 221 318 225
+    L289.2 375 Q270 380 250.8 375 Z" fill="url(#dentin)"/>
+    <path d="M222 225 Q270 219 318 225
+    L303.6 276 Q270 273 236.4 276 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M270 276 L270 348" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><g filter="url(#soft)">
+    <path d="M322 205 Q370 209 418 205
+    L389.2 55 Q370 50 350.8 55 Z" fill="url(#dentin)"/>
+    <path d="M322 205 Q370 211 418 205
+    L403.6 154 Q370 157 336.4 154 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M370 154 L370 82.00000000000001" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><g filter="url(#soft)">
+    <path d="M352 225 Q400 221 448 225
+    L419.2 375 Q400 380 380.8 375 Z" fill="url(#dentin)"/>
+    <path d="M352 225 Q400 219 448 225
+    L433.6 276 Q400 273 366.4 276 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M400 276 L400 348" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    <path d="M448 231 q-21.12 3 0 8" fill="#1b242b" opacity="0.85"/>
+  </g><g filter="url(#soft)">
+    <path d="M452 205 Q500 209 548 205
+    L519.2 55 Q500 50 480.8 55 Z" fill="url(#dentin)"/>
+    <path d="M452 205 Q500 211 548 205
+    L533.6 154 Q500 157 466.4 154 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M500 154 L500 82.00000000000001" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><g filter="url(#soft)">
+    <path d="M482 225 Q530 221 578 225
+    L549.2 375 Q530 380 510.8 375 Z" fill="url(#dentin)"/>
+    <path d="M482 225 Q530 219 578 225
+    L563.6 276 Q530 273 496.4 276 Z" fill="#eef3f7" opacity="0.92"/>
+    <path d="M530 276 L530 348" stroke="#1b242b" stroke-width="11.52" opacity="0.8" fill="none" stroke-linecap="round"/>
+    
+  </g><path d="M60 150 Q310 120 560 150" fill="none" stroke="#9aa7af" stroke-width="5" opacity="0.5"/>
+    <path d="M60 285 Q310 315 560 285" fill="none" stroke="#9aa7af" stroke-width="5" opacity="0.5"/>
+  <rect width="620" height="430" filter="url(#grain)" opacity="0.45"/>
+</svg>

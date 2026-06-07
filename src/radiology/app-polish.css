@@ -1,0 +1,109 @@
+/* ==================================================================== */
+/* App-wide clinical polish (v2)                                         */
+/* Unifies the whole app with the radiology module: one calm slate base, */
+/* a consistent teal accent, hairline borders, layered depth, and card   */
+/* hover lifts. Additive + scoped to the dark theme so it overrides the   */
+/* older hardcoded rules without touching component JSX.                  */
+/* ==================================================================== */
+
+:root[data-theme="dark"] {
+  --c-bg: #0a0e14;
+  --c-panel: #111722;
+  --c-line: #232c3d;
+  --c-line-2: #2e3950;
+  --c-text: #e8eef9;
+  --c-muted: #8794ab;
+  --c-accent: #36d6c3;
+  --c-accent-2: #5b8bff;
+}
+
+/* calmer, deeper background with soft clinical glows */
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .app-shell {
+  background:
+    radial-gradient(1100px 560px at 16% -12%, rgba(54, 214, 195, 0.06), transparent 58%),
+    radial-gradient(1000px 620px at 102% -6%, rgba(91, 139, 255, 0.07), transparent 55%),
+    var(--c-bg);
+}
+
+/* unified panel surface: hairline border, inset sheen, soft drop shadow */
+:root[data-theme="dark"] .glass-panel,
+:root[data-theme="dark"] .kit-section,
+:root[data-theme="dark"] .engine-card,
+:root[data-theme="dark"] .clinic-grid article,
+:root[data-theme="dark"] .clinic-hero,
+:root[data-theme="dark"] .engines-hero-bar,
+:root[data-theme="dark"] .upload-zone,
+:root[data-theme="dark"] .auth-panel,
+:root[data-theme="dark"] .dash-tools,
+:root[data-theme="dark"] .anatomy-panel,
+:root[data-theme="dark"] .analytics-panel,
+:root[data-theme="dark"] .kit-toolbar,
+:root[data-theme="dark"] .track-grid article,
+:root[data-theme="dark"] .trend-card,
+:root[data-theme="dark"] .radar-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    var(--c-panel);
+  border: 1px solid var(--c-line);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 14px 32px -22px rgba(0, 0, 0, 0.85);
+  border-radius: 16px;
+}
+
+/* clickable cards get a lift + accent edge on hover */
+:root[data-theme="dark"] .engine-card,
+:root[data-theme="dark"] .clinic-grid article,
+:root[data-theme="dark"] .dash-tools .command-actions button,
+:root[data-theme="dark"] .track-grid article {
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+:root[data-theme="dark"] .engine-card:hover,
+:root[data-theme="dark"] .clinic-grid article:hover,
+:root[data-theme="dark"] .dash-tools .command-actions button:hover,
+:root[data-theme="dark"] .track-grid article:hover {
+  transform: translateY(-3px);
+  border-color: rgba(54, 214, 195, 0.45);
+  box-shadow: 0 18px 38px -22px rgba(0, 0, 0, 0.9);
+}
+
+/* sidebar active item: teal accent rail instead of a flat fill */
+:root[data-theme="dark"] .mode-group button.active {
+  background: linear-gradient(90deg, rgba(54, 214, 195, 0.16), rgba(54, 214, 195, 0.03));
+  box-shadow: inset 3px 0 0 var(--c-accent);
+  color: #eaf6f3;
+}
+:root[data-theme="dark"] .mode-group button.active small { color: #9fe6dc; }
+:root[data-theme="dark"] .mode-group button:not(.active):hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* produces / status chips share the teal accent */
+:root[data-theme="dark"] .engine-produces,
+:root[data-theme="dark"] .produces {
+  background: rgba(54, 214, 195, 0.12);
+  color: #8fe7db;
+}
+
+/* primary accent buttons: subtle gradient + glow, consistent teal */
+:root[data-theme="dark"] .primary-chip,
+:root[data-theme="dark"] .command-greeting button,
+:root[data-theme="dark"] .topbar-due {
+  background: linear-gradient(180deg, #3ee0cd, #25b6a6);
+  color: #04130f;
+  border: 0;
+  box-shadow: 0 10px 24px -12px rgba(54, 214, 195, 0.6);
+}
+
+/* tighter, more editorial headings */
+:root[data-theme="dark"] .page-intro h2,
+:root[data-theme="dark"] .chat-header h2,
+:root[data-theme="dark"] .command-greeting h2 {
+  letter-spacing: -0.015em;
+}
+
+/* page-intro icon badge picks up the accent */
+:root[data-theme="dark"] .page-icon {
+  background: linear-gradient(180deg, rgba(54, 214, 195, 0.18), rgba(54, 214, 195, 0.06));
+  border: 1px solid rgba(54, 214, 195, 0.3);
+  color: var(--c-accent);
+}

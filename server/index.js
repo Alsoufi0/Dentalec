@@ -326,24 +326,27 @@ const requireApiKey = (_req, res, next) => {
 };
 
 const defaultModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+// Output budgets are generous on purpose: a dental answer must never be cut off
+// mid-section. The continuation loop in createResponse is a second safety net
+// that finishes any answer that still reaches its cap.
 const outputLimits = {
-  answer: 750,
-  summary: 950,
-  explanation: 850,
-  test: 1100,
-  flashcards: 900,
-  notes: 950,
-  weakQuiz: 950,
-  caseStudy: 1050,
-  mnemonics: 850,
-  conceptMap: 850,
-  clinicalChecklist: 800,
-  examTraps: 800,
-  teachBack: 800,
-  osce: 1100,
-  adaptivePlan: 900,
-  curriculumMap: 950,
-  clinicalVisionChecklist: 850,
+  answer: 1800,
+  summary: 2600,
+  explanation: 2000,
+  test: 2600,
+  flashcards: 1600,
+  notes: 2600,
+  weakQuiz: 2000,
+  caseStudy: 2600,
+  mnemonics: 1600,
+  conceptMap: 1900,
+  clinicalChecklist: 1800,
+  examTraps: 1600,
+  teachBack: 1600,
+  osce: 2600,
+  adaptivePlan: 2000,
+  curriculumMap: 2400,
+  clinicalVisionChecklist: 1800,
   ...Object.fromEntries(Object.values(dentalosEngines).map((engine) => [engine.mode, engine.outputLimit]))
 };
 
@@ -356,7 +359,7 @@ const tutorInstructions = `You are a dental school study tutor. Search the uploa
 
 const modePrompts = {
   summary:
-    'Create a premium dental study summary. Use these sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. Keep each section concise and useful for studying. Include page/source references when available.',
+    'Create a premium dental study summary. Use these sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. In the Visual Structure Map section, express the relationships as arrow chains, one per line, using this exact notation: Concept -> Subconcept -> Detail (for example: Caries -> Demineralization -> Cavitation). Keep each section concise and useful for studying. Include page/source references when available.',
   explanation:
     'Explain the topic like a calm dental tutor. Start with the plain-language idea, then add dental-school mechanism, clinical relevance, and a quick memory hook.',
   test:
@@ -537,7 +540,7 @@ const artifactPrompts = {
   flashcards:
     'Create 10 concise dental flashcards from the provided material. Return only valid JSON with this shape: {"cards":[{"question":"...","answer":"..."}]}. Use short question fronts and exam-focused answer backs. Focus on mechanisms, definitions, classifications, clinical consequences, and anatomy.',
   notes:
-    'Create premium dental study notes from the material. Use these sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. Keep wording clean, scannable, and exam-focused.',
+    'Create premium dental study notes from the material. Use these sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. In the Visual Structure Map section, express the relationships as arrow chains, one per line, using this exact notation: Concept -> Subconcept -> Detail (for example: Pulp -> Inflammation -> Pulpitis -> Necrosis). Keep wording clean, scannable, and exam-focused.',
   weakQuiz:
     'Create a targeted weak-spot quiz from the provided material. Include 6 questions, then a Markdown table with Question, Skill Tested, Marks, Common Error, Remediation.',
   caseStudy:
@@ -615,40 +618,81 @@ function buildConversationInput(message, history = []) {
     .map((item) => `${item.role === 'assistant' ? 'Tutor' : 'Student'}: ${trimForModel(item.text, 600)}`)
     .join('\n\n');
 
-  if (!recentHistory) return trimForModel(message, 1800);
-  return `Recent study conversation:\n${recentHistory}\n\nCurrent student message:\n${trimForModel(message, 1800)}`;
+  if (!recentHistory) return trimForModel(message, 6000);
+  return `Recent study conversation:\n${recentHistory}\n\nCurrent student message:\n${trimForModel(message, 6000)}`;
 }
 
 function isOpenAIVectorStoreId(value) {
   return typeof value === 'string' && /^vs[_-]/.test(value);
 }
 
+function joinContinuation(soFar, next) {
+  if (!soFar) return next;
+  if (!next) return soFar;
+  // The continuation resumes mid-thought, so avoid inserting a space inside a
+  // word while still keeping paragraph and list breaks readable.
+  if (/\s$/.test(soFar) || /^\s/.test(next)) return soFar + next;
+  return `${soFar} ${next}`;
+}
+
 async function createResponse({ vectorStoreId, input, mode, history, persona = 'peer' }) {
   const hasSearchableSource = isOpenAIVectorStoreId(vectorStoreId);
-  const responseOptions = {
+  const maxOutputTokens = outputLimits[mode] ?? engineOutputLimitFor(mode) ?? 1800;
+  const baseOptions = {
     model: defaultModel,
     instructions: `${tutorInstructions}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nSource status: ${
       hasSearchableSource
         ? 'A searchable uploaded source is available. Use file search before answering.'
         : 'No valid searchable source is attached for this local/test session. Use only the conversation and prompt context; if source context is missing, say so briefly instead of inventing citations.'
     }\n\nMode: ${mode}. ${modePrompts[mode] ?? modePrompts.answer}`,
-    input: buildConversationInput(input, history),
-    max_output_tokens: outputLimits[mode] ?? engineOutputLimitFor(mode) ?? 850
+    max_output_tokens: maxOutputTokens
   };
 
   if (hasSearchableSource) {
-    responseOptions.tools = [
+    // Retrieve more passages so classifications, criteria, and protocol steps
+    // are not dropped before the model even sees them.
+    baseOptions.tools = [
       {
         type: 'file_search',
         vector_store_ids: [vectorStoreId],
-        max_num_results: ['test', 'caseStudy', 'weakQuiz', 'conceptMap'].includes(mode) ? 4 : 3
+        max_num_results: 10
       }
     ];
   }
 
-  const response = await openaiClient.responses.create(responseOptions);
+  let response = await openaiClient.responses.create({
+    ...baseOptions,
+    input: buildConversationInput(input, history)
+  });
+  let combined = response.output_text || '';
 
-  return response.output_text;
+  // Safety net: if the answer was cut off at the token cap, transparently ask
+  // the model to keep going from where it stopped so the student still gets
+  // every section, table row, differential, and protocol step.
+  let continuations = 0;
+  try {
+    while (
+      response.status === 'incomplete' &&
+      response.incomplete_details?.reason === 'max_output_tokens' &&
+      continuations < 3
+    ) {
+      continuations += 1;
+      response = await openaiClient.responses.create({
+        ...baseOptions,
+        previous_response_id: response.id,
+        input:
+          'Continue the previous answer from the exact word where it stopped. Do not repeat earlier text, do not restate the introduction, and finish every remaining section, table row, and list item.'
+      });
+      const next = response.output_text || '';
+      if (!next.trim()) break;
+      combined = joinContinuation(combined, next);
+    }
+  } catch (continuationError) {
+    // Keep whatever we have rather than failing the whole request.
+    console.error('Answer continuation failed:', continuationError.message);
+  }
+
+  return combined;
 }
 
 app.get(apiPaths('/api/health'), (_req, res) => {
@@ -801,6 +845,76 @@ app.post(apiPaths('/api/artifact'), requireAuth, rateLimit({ windowMs: 60 * 1000
       return;
     }
     res.json({ text });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Radiology X-ray interpreter: vision feedback on a student's reading of an
+// X-ray. The client sends a rasterised image (data URL, since the demo cases are
+// SVG and OpenAI vision needs raster), the student's text, and the case's
+// reference findings. We return structured, formative feedback as JSON.
+function extractJson(text) {
+  if (!text) return null;
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+app.post(apiPaths('/api/radiology/interpret'), requireAuth, rateLimit({ windowMs: 60 * 1000, max: 12, label: 'radiology' }), requireAiBudget, requireApiKey, async (req, res) => {
+  const { interpretation = '', keyFindings = [], image, caseTitle = '', caseType = '' } = req.body;
+  if (!image || !String(interpretation).trim()) {
+    res.status(400).json({ error: 'An image and a written interpretation are required.' });
+    return;
+  }
+  try {
+    const reference = Array.isArray(keyFindings) && keyFindings.length
+      ? `Reference findings for this case (use your own judgement against the image; do not just echo these):\n- ${keyFindings.join('\n- ')}`
+      : '';
+    const instructions = [
+      'You are a dental radiology tutor giving formative feedback to a dental student on how they read an X-ray.',
+      'Be encouraging, specific, and educational. Ground every point in what is actually visible in the image.',
+      'Do not invent findings that are not supported by the image. Keep each bullet to one concise sentence.',
+      `Case: ${caseTitle} (${caseType}).`,
+      reference,
+      `Student's interpretation:\n"""${String(interpretation).slice(0, 2000)}"""`,
+      'Respond ONLY with a JSON object of this exact shape, no prose around it:',
+      '{ "score": <integer 0-100>, "correct": [string], "missed": [string], "landmarks": [string], "significance": string }',
+      'Where: correct = what the student identified correctly; missed = important findings they did not mention; landmarks = key landmarks or a systematic search order to look for next time; significance = the clinical significance of the main finding(s).'
+    ].filter(Boolean).join('\n\n');
+
+    const response = await openaiClient.responses.create({
+      model: defaultModel,
+      max_output_tokens: 900,
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: instructions },
+            { type: 'input_image', image_url: image }
+          ]
+        }
+      ]
+    });
+    incrementUsage(req.user, 'aiCalls');
+    const raw = response.output_text || '';
+    const data = extractJson(raw);
+    if (!data) {
+      res.json({ score: null, correct: [], missed: [], landmarks: [], significance: raw });
+      return;
+    }
+    res.json({
+      score: typeof data.score === 'number' ? Math.max(0, Math.min(100, Math.round(data.score))) : null,
+      correct: Array.isArray(data.correct) ? data.correct : [],
+      missed: Array.isArray(data.missed) ? data.missed : [],
+      landmarks: Array.isArray(data.landmarks) ? data.landmarks : [],
+      significance: typeof data.significance === 'string' ? data.significance : ''
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
