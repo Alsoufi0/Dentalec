@@ -2765,6 +2765,12 @@ function App() {
                             if (event.key === 'Enter' || event.key === ' ') {
                               event.preventDefault();
                               toggleCard(activeCard.id);
+                            } else if (event.key === 'ArrowRight') {
+                              event.preventDefault();
+                              setActiveCardIndex((index) => (index + 1) % flashcards.length);
+                            } else if (event.key === 'ArrowLeft') {
+                              event.preventDefault();
+                              setActiveCardIndex((index) => (index - 1 + flashcards.length) % flashcards.length);
                             }
                           }}
                         >
@@ -2772,7 +2778,7 @@ function App() {
                             <div className="flip-face flip-front">
                               <span className="flip-tag">Question</span>
                               <h4>{activeCard.question}</h4>
-                              <small>Click or press space to flip</small>
+                              <small>Tap to flip · ← → to move</small>
                             </div>
                             <div className="flip-face flip-back">
                               <span className="flip-tag">Answer</span>

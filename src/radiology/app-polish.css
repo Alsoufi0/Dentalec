@@ -153,8 +153,8 @@
 
 /* ---- Apple-clean refinements: tables, charts, motion ---- */
 :root[data-theme="dark"] .answer-table-wrap {
-  border: 1px solid var(--c-line, #232c3d); border-radius: 14px; overflow: hidden;
-  background: var(--c-panel, #111722); margin: 12px 0;
+  border: 1px solid var(--c-line, #232c3d); border-radius: 14px; overflow-x: auto;
+  -webkit-overflow-scrolling: touch; background: var(--c-panel, #111722); margin: 12px 0;
 }
 :root[data-theme="dark"] .answer-table { border-collapse: separate; border-spacing: 0; width: 100%; }
 :root[data-theme="dark"] .answer-table th {
@@ -291,4 +291,22 @@
   background: linear-gradient(180deg, rgba(54, 214, 195, 0.18), rgba(54, 214, 195, 0.06));
   border: 1px solid rgba(54, 214, 195, 0.3);
   color: var(--c-accent);
+}
+
+/* ---- Mobile refinements for the new interactive surfaces ---- */
+@media (max-width: 560px) {
+  .quiz-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .mcq { padding: 12px 13px; }
+  .mcq-opt { padding: 12px 12px; }
+  .engines-need-source { flex-direction: column; align-items: flex-start; }
+  .rad-page-head { gap: 10px; }
+  .rad-modal { width: 100%; }
+  .rv-calib-panel { flex-wrap: wrap; width: calc(100% - 20px); justify-content: center; gap: 6px; bottom: 8px; }
+  .rv-toolbar { gap: 8px; }
+  .rv-sliders { width: 100%; margin-left: 0; justify-content: space-between; }
+  .cl-grid { grid-template-columns: 1fr; }
+  .answer-section-head { font-size: 0.9rem; }
+  /* comfortable tap targets */
+  .mode-group button { min-height: 44px; }
+  .rv-tool { width: 38px; height: 38px; }
 }
