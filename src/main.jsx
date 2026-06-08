@@ -47,7 +47,6 @@ import {
 import './styles.css';
 import './radiology/app-polish.css';
 
-const Radiology = React.lazy(() => import('./Radiology.jsx'));
 import { CasesPage, RadiologyPage, InterpreterPage } from './radiology/index.jsx';
 
 // Radiology routes render their own dark clinical chrome, so the generic
@@ -1109,18 +1108,6 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
         </div>
       </div>}
 
-      {hasSource && <article className="rad-panel glass-panel">
-        <div className="panel-title">
-          <div>
-            <strong>Radiograph Reader</strong>
-            <span>Pan, zoom, and tap findings to learn how to read a periapical x-ray</span>
-          </div>
-        </div>
-        <React.Suspense fallback={<div className="rad-viewer loading"><span>Loading radiograph…</span></div>}>
-          <Radiology onStudy={submitStudy} />
-        </React.Suspense>
-      </article>}
-
       {hasSource && <div className="dash-tools">
         <div className="dash-tools-head">
           <strong>Study tools</strong>
@@ -1149,6 +1136,7 @@ function App() {
   const [mode, setMode] = useState('answer');
   const [page, setPage] = useState('dashboard');
   const [radCaseId, setRadCaseId] = useState(null);
+  const [selectedEngine, setSelectedEngine] = useState('knowledgeGap');
   const [message, setMessage] = useState('');
   const [textSourceTitle, setTextSourceTitle] = useState('');
   const [textSource, setTextSource] = useState('');
@@ -1201,6 +1189,7 @@ function App() {
     return `${studySet.files.length} ${sourceKind}${studySet.files.length > 1 ? 's' : ''}`;
   }, [sourceKind, studySet]);
   const activePage = pages.find((item) => item.id === page) ?? pages[0];
+  const selectedEngineObj = dentalosEngines.find((engine) => engine.id === selectedEngine) ?? dentalosEngines[0];
   const visibleChat = useMemo(() => {
     if (!modes.some((item) => item.id === page)) return [];
     return chat.filter((item) => item.mode === page || (page === 'answer' && !item.mode));
@@ -2646,44 +2635,36 @@ function App() {
               <section className="engines-page">
                 <div className="engines-hero-bar">
                   <p>Study tools</p>
-                  <h3>Turn your own notes into one focused study output.</h3>
-                  <small>Each tool reads only the source you uploaded and gives you something specific back: a gap check, a comparison table, a practice case, mnemonics, and more. Pick what you need for today.</small>
+                  <h3>Pick how you want to study this source.</h3>
                 </div>
-                {!studySet && (
+                {!studySet ? (
                   <div className="engines-need-source">
                     <span>Add a study source first so these tools can work from your material.</span>
                     <button type="button" onClick={() => navigate('library')}>Add a source</button>
                   </div>
-                )}
-                {engineGroups.map((group) => (
-                  <div key={group.key} className="engine-group">
-                    <div className="engine-group-head">
-                      <strong>{group.key}</strong>
-                      <span>{group.caption}</span>
+                ) : (
+                  <div className="study-picker">
+                    <label htmlFor="study-way">Way of study</label>
+                    <div className="study-picker-row">
+                      <select id="study-way" value={selectedEngine} onChange={(event) => setSelectedEngine(event.target.value)}>
+                        {engineGroups.map((group) => (
+                          <optgroup key={group.key} label={group.key}>
+                            {dentalosEngines.filter((engine) => engine.group === group.key).map((engine) => (
+                              <option key={engine.id} value={engine.id}>{engine.title}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <button type="button" className="primary-chip" onClick={() => createArtifact(selectedEngine)} disabled={!studySet || !!busy}>
+                        {busy === 'artifact' ? <><Loader2 size={16} className="spin" /> Generating…</> : <><Sparkles size={16} /> Generate {selectedEngineObj.produces.toLowerCase()}</>}
+                      </button>
                     </div>
-                    <div className="engine-grid">
-                      {dentalosEngines.filter((engine) => engine.group === group.key).map((engine) => {
-                        const Icon = engine.icon;
-                        return (
-                          <article key={engine.id} className="engine-card">
-                            <div className="engine-card-top">
-                              <span className="engine-ic"><Icon size={20} /></span>
-                              <span className="engine-produces">{engine.produces}</span>
-                            </div>
-                            <strong>{engine.title}</strong>
-                            <span>{engine.copy}</span>
-                            <button type="button" onClick={() => createArtifact(engine.id)} disabled={!studySet || !!busy}>
-                              Generate
-                            </button>
-                          </article>
-                        );
-                      })}
-                    </div>
+                    <p className="study-picker-desc">{selectedEngineObj.copy}</p>
                   </div>
-                ))}
+                )}
                 <p className="safety-note">
                   <ShieldCheck size={14} />
-                  Educational support only. Source-grounded, with no autonomous diagnosis or treatment planning.
+                  Educational support only, grounded in your source. Answers can be wrong, so verify against your material.
                 </p>
               </section>
             ) : page === 'clinic' ? (
@@ -2844,26 +2825,6 @@ function App() {
                         </div>
                         <button type="button" onClick={exportAnki}>Export Anki TSV</button>
                       </aside>
-                      <details className="flash-browse">
-                        <summary>Browse all {flashcards.length} cards</summary>
-                        <div className="flashcard-grid compact scroll">
-                          {flashcards.map((card, index) => (
-                            <article className={activeCard?.id === card.id ? 'flashcard active' : 'flashcard'} key={card.id}>
-                              <button type="button" className="card-select" onClick={() => setActiveCardIndex(index)}>
-                                <span>Card {index + 1}</span>
-                                <strong>{card.question}</strong>
-                              </button>
-                              {revealedCards[card.id] && <p>{card.answer}</p>}
-                              <div className="card-actions">
-                                <button type="button" onClick={() => toggleCard(card.id)}>
-                                  {revealedCards[card.id] ? 'Hide' : 'Show'}
-                                </button>
-                                <button type="button" onClick={() => removeCard(card.id)}>Remove</button>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      </details>
                     </div>
                   ) : (
                     <p className="muted">No flashcards yet. Use Make cards or the Cards button under a tutor answer.</p>

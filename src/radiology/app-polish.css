@@ -340,3 +340,15 @@
   .chat-panel { min-height: 0; border-radius: 0; }
   .messages { -webkit-overflow-scrolling: touch; }
 }
+
+/* Study Tools: dropdown picker instead of a wall of generate boxes */
+.study-picker { background: var(--c-panel, #111722); border: 1px solid var(--c-line, #232c3d); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.study-picker label { color: var(--c-muted, #8794ab); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.study-picker-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.study-picker select { flex: 1 1 200px; min-width: 0; padding: 11px 13px; border-radius: 11px; border: 1px solid var(--c-line-2, #2e3950); background: var(--c-bg, #0a0e14); color: var(--c-text, #e8eef9); font-size: 0.9rem; }
+.study-picker .primary-chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.study-picker-desc { color: var(--c-muted, #8794ab); font-size: 0.86rem; line-height: 1.5; margin: 2px 0 0; }
+
+/* condensed tables (concise + clear) */
+:root[data-theme="dark"] .answer-table th { padding: 8px 11px; font-size: 0.66rem; }
+:root[data-theme="dark"] .answer-table td { padding: 8px 11px; font-size: 0.82rem; line-height: 1.4; }

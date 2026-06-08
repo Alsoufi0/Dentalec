@@ -330,23 +330,23 @@ const defaultModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 // mid-section. The continuation loop in createResponse is a second safety net
 // that finishes any answer that still reaches its cap.
 const outputLimits = {
-  answer: 1800,
-  summary: 2600,
-  explanation: 2000,
-  test: 2600,
-  flashcards: 1600,
-  notes: 2600,
-  weakQuiz: 2000,
-  caseStudy: 2600,
-  mnemonics: 1600,
-  conceptMap: 1900,
-  clinicalChecklist: 1800,
-  examTraps: 1600,
-  teachBack: 1600,
-  osce: 2600,
-  adaptivePlan: 2000,
-  curriculumMap: 2400,
-  clinicalVisionChecklist: 1800,
+  answer: 1100,
+  summary: 1500,
+  explanation: 1200,
+  test: 1800,
+  flashcards: 1400,
+  notes: 1500,
+  weakQuiz: 1500,
+  caseStudy: 1700,
+  mnemonics: 1000,
+  conceptMap: 1100,
+  clinicalChecklist: 1100,
+  examTraps: 1000,
+  teachBack: 1100,
+  osce: 1800,
+  adaptivePlan: 1300,
+  curriculumMap: 1500,
+  clinicalVisionChecklist: 1100,
   ...Object.fromEntries(Object.values(dentalosEngines).map((engine) => [engine.mode, engine.outputLimit]))
 };
 
@@ -355,7 +355,7 @@ function trimForModel(value, limit = 1800) {
   return text.length > limit ? `${text.slice(0, limit).trim()}...` : text;
 }
 
-const tutorInstructions = `You are a dental school study tutor. Search the uploaded PDFs before answering. Base your answer on the uploaded course material whenever relevant snippets are found. For broad or informal questions, infer the likely dental topic, search for nearby terms, and explain the matching source material in clear student language. Format answers with short section headings and clean numbered or bulleted lines. Use Markdown tables for rubrics, comparison grids, diagnostic criteria, protocols, decision pathways, marking schemes, and feature lists. Preserve important details; simplify by structuring information visually, never by deleting criteria, classifications, differentials, complications, prognosis, or protocol steps. Do not use decorative symbols, emoji, or casual filler. If the uploaded source truly has no relevant content, say what is missing and offer a short general dental-study explanation clearly labeled as general background. Be precise with anatomy, pathology, materials, procedures, and terminology. Never present yourself as a licensed clinician.`;
+const tutorInstructions = `You are a dental school study tutor. Search the uploaded PDFs before answering. Base your answer on the uploaded course material whenever relevant snippets are found. For broad or informal questions, infer the likely dental topic, search for nearby terms, and explain the matching source material in clear student language. Format answers with short section headings and clean numbered or bulleted lines. Use Markdown tables for rubrics, comparison grids, diagnostic criteria, protocols, decision pathways, marking schemes, and feature lists. Preserve important details; simplify by structuring information visually, never by deleting criteria, classifications, differentials, complications, prognosis, or protocol steps. Do not use decorative symbols, emoji, or casual filler. If the uploaded source truly has no relevant content, say what is missing and offer a short general dental-study explanation clearly labeled as general background. Be precise with anatomy, pathology, materials, procedures, and terminology. Never present yourself as a licensed clinician. Be concise and scannable: lead with the answer, use short bullets and compact tables, keep each section tight, and avoid repetition, filler, and restating the question. Prefer the shortest response that still covers the essentials.`;
 
 const modePrompts = {
   summary:
