@@ -548,6 +548,13 @@ const commandActions = [
   { title: 'Practice exam', subtitle: 'Questions and weak spots', icon: FileQuestion, page: 'test', prompt: 'Start an oral exam on this subject.' }
 ];
 
+const clinicTools = [
+  { id: 'case', icon: Stethoscope, title: 'Clinical case', desc: 'A step-by-step patient scenario to reason through.', artifact: 'caseStudy', cta: 'Generate case', featured: true },
+  { id: 'osce', icon: ClipboardList, title: 'OSCE station', desc: 'An exam station with a patient script and marking rubric.', artifact: 'osce', cta: 'Generate OSCE' },
+  { id: 'checklist', icon: CheckCircle2, title: 'Exam checklist', desc: 'Observable signs, red flags, and how to present findings.', artifact: 'clinicalVisionChecklist', cta: 'Build checklist' },
+  { id: 'rescue', icon: Brain, title: 'Rescue plan', desc: 'Targeted drills and a spaced review plan for weak spots.', artifact: 'adaptivePlan', cta: 'Create plan' }
+];
+
 const dentalSubjects = [
   'Dental Anatomy',
   'Endodontics',
@@ -2138,85 +2145,84 @@ function App() {
   if (!auth.user) {
     return (
       <main className="app-shell auth-shell">
-        <section className="auth-panel">
-          <div className="auth-topbar">
-            <div className="brand-mark">
-              <GraduationCap size={24} />
+        <button
+          type="button"
+          className="ghost-button theme-toggle auth-theme"
+          onClick={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </button>
+        <div className="auth-split">
+          <aside className="auth-aside">
+            <div className="auth-brand">
+              <div className="brand-mark"><GraduationCap size={22} /></div>
+              <div>
+                <strong>DentalOS AI</strong>
+                <span>Simav Dental Tutor</span>
+              </div>
             </div>
-            <button
-              type="button"
-              className="ghost-button theme-toggle"
-              onClick={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-              {theme === 'dark' ? 'Light' : 'Dark'}
-            </button>
-          </div>
-          <div className="auth-copy">
-            <p>Private dental study workspace</p>
-            <h1>{authMode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
-            <span>Simav Dental Tutor turns dental PDFs, notes, rubrics, and protocols into summaries, explanations, oral tests, flashcards, and voice study sessions.</span>
-          </div>
-          <div className="guide-list" aria-label="How to use Simav Dental Tutor">
-            <article>
-              <strong>1. Create your private account</strong>
-              <span>Your study history, notes, and flashcards stay saved across devices.</span>
-            </article>
-            <article>
-              <strong>2. Add study material</strong>
-              <span>Use a lecture PDF, textbook chapter, pasted notes, rubric, or exam review file.</span>
-            </article>
-            <article>
-              <strong>3. Pick a study mode</strong>
-              <span>Ask questions, request a summary, generate a case, or start an oral test.</span>
-            </article>
-            <article>
-              <strong>4. Turn on Study Buddy</strong>
-              <span>Speak naturally, listen to answers, and study hands-free when microphone access is available.</span>
-            </article>
-          </div>
-          <form className="auth-form" onSubmit={submitAuth}>
-            {authMode === 'signup' && (
+            <h1 className="auth-headline">Study from your own notes, and actually remember them.</h1>
+            <p className="auth-sub">Upload your lectures and turn them into summaries, flashcards, quizzes, clinical cases, and X-ray practice. Every answer is grounded in your material.</p>
+            <ul className="auth-benefits">
+              <li><span className="auth-bic"><BookOpen size={18} /></span><div><strong>Grounded in your source</strong><span>Answers come from the PDFs and notes you upload, not the open internet.</span></div></li>
+              <li><span className="auth-bic"><BookmarkPlus size={18} /></span><div><strong>Active recall, built in</strong><span>Flashcards with spaced repetition and interactive quizzes that grade you.</span></div></li>
+              <li><span className="auth-bic"><Activity size={18} /></span><div><strong>Radiology practice</strong><span>Read, measure, and interpret X-rays with instant AI feedback.</span></div></li>
+            </ul>
+          </aside>
+
+          <section className="auth-card">
+            <div className="auth-card-head">
+              <h2>{authMode === 'signup' ? 'Create your account' : 'Welcome back'}</h2>
+              <p>{authMode === 'signup' ? 'Set up your private workspace in under a minute.' : 'Sign in to pick up where you left off.'}</p>
+            </div>
+            <form className="auth-form" onSubmit={submitAuth}>
+              {authMode === 'signup' && (
+                <label>
+                  Name
+                  <input
+                    value={authForm.name}
+                    onChange={(event) => setAuthForm((form) => ({ ...form, name: event.target.value }))}
+                    placeholder="Your name"
+                    autoComplete="name"
+                  />
+                </label>
+              )}
               <label>
-                Name
+                Email
                 <input
-                  value={authForm.name}
-                  onChange={(event) => setAuthForm((form) => ({ ...form, name: event.target.value }))}
-                  placeholder="Dental student"
-                  autoComplete="name"
+                  type="email"
+                  value={authForm.email}
+                  onChange={(event) => setAuthForm((form) => ({ ...form, email: event.target.value }))}
+                  placeholder="you@example.com"
+                  autoComplete="email"
                 />
               </label>
-            )}
-            <label>
-              Email
-              <input
-                type="email"
-                value={authForm.email}
-                onChange={(event) => setAuthForm((form) => ({ ...form, email: event.target.value }))}
-                placeholder="you@example.com"
-                autoComplete="email"
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={authForm.password}
-                onChange={(event) => setAuthForm((form) => ({ ...form, password: event.target.value }))}
-                placeholder="At least 8 characters"
-                autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
-              />
-            </label>
-            {authError && <div className="error auth-error">{authError}</div>}
-            <button type="submit" className="auth-submit">
-              {authMode === 'signup' ? <UserPlus size={18} /> : <Sparkles size={18} />}
-              {authMode === 'signup' ? 'Create account' : 'Sign in'}
-            </button>
-          </form>
-          <button type="button" className="auth-switch" onClick={() => setAuthMode((value) => (value === 'signup' ? 'login' : 'signup'))}>
-            {authMode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create an account'}
-          </button>
-        </section>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={authForm.password}
+                  onChange={(event) => setAuthForm((form) => ({ ...form, password: event.target.value }))}
+                  placeholder={authMode === 'signup' ? 'At least 8 characters' : 'Your password'}
+                  autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                />
+              </label>
+              {authError && <div className="error auth-error">{authError}</div>}
+              <button type="submit" className="auth-submit">
+                {authMode === 'signup' ? <UserPlus size={18} /> : <Sparkles size={18} />}
+                {authMode === 'signup' ? 'Create account' : 'Sign in'}
+              </button>
+            </form>
+            <p className="auth-switch-line">
+              {authMode === 'signup' ? 'Already have an account?' : 'New to DentalOS?'}
+              <button type="button" className="auth-switch" onClick={() => { setAuthMode((value) => (value === 'signup' ? 'login' : 'signup')); setAuthError(''); }}>
+                {authMode === 'signup' ? 'Sign in' : 'Create an account'}
+              </button>
+            </p>
+            <p className="auth-fineprint">Educational study tool. Your uploads stay in your private account.</p>
+          </section>
+        </div>
       </main>
     );
   }
@@ -2669,12 +2675,10 @@ function App() {
               </section>
             ) : page === 'clinic' ? (
               <section className="clinic-page">
-                <div className="clinic-hero">
-                  <div>
-                    <p>Clinical cases</p>
-                    <h3>Practice with patient scenarios built from your notes.</h3>
-                    <span>Generate a case to reason through, an OSCE station to rehearse, or a checklist to structure your exam. Each one is grounded in the source you uploaded.</span>
-                  </div>
+                <div className="engines-hero-bar">
+                  <p>Clinical cases</p>
+                  <h3>Practice with patient scenarios from your notes.</h3>
+                  <small>Pick a format below. Each one is built only from the source you uploaded.</small>
                 </div>
                 {!studySet && (
                   <div className="engines-need-source">
@@ -2683,34 +2687,22 @@ function App() {
                   </div>
                 )}
                 <div className="clinic-grid">
-                  <article>
-                    <span className="clinic-ic"><Stethoscope size={22} /></span>
-                    <strong>Clinical case</strong>
-                    <span>A step-by-step patient scenario with history, findings, and decisions to reason through.</span>
-                    <small className="produces">Produces: interactive case</small>
-                    <button type="button" onClick={() => createArtifact('caseStudy')} disabled={!studySet || !!busy}>Generate case</button>
-                  </article>
-                  <article>
-                    <span className="clinic-ic"><ClipboardList size={22} /></span>
-                    <strong>OSCE station</strong>
-                    <span>An exam-style station with a patient script, tasks, and a marking rubric to rehearse against.</span>
-                    <small className="produces">Produces: OSCE + rubric</small>
-                    <button type="button" onClick={() => createArtifact('osce')} disabled={!studySet || !!busy}>Generate OSCE</button>
-                  </article>
-                  <article>
-                    <span className="clinic-ic"><CheckCircle2 size={22} /></span>
-                    <strong>Exam checklist</strong>
-                    <span>Turn a topic into observable signs, red flags, and a structured way to present your findings.</span>
-                    <small className="produces">Produces: checklist</small>
-                    <button type="button" onClick={() => createArtifact('clinicalVisionChecklist')} disabled={!studySet || !!busy}>Build checklist</button>
-                  </article>
-                  <article>
-                    <span className="clinic-ic"><Brain size={22} /></span>
-                    <strong>Rescue plan</strong>
-                    <span>Turn your weak spots into targeted drills, confidence checks, and a spaced review plan.</span>
-                    <small className="produces">Produces: study plan</small>
-                    <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>Create plan</button>
-                  </article>
+                  {clinicTools.map((tool) => {
+                    const Icon = tool.icon;
+                    return (
+                      <article key={tool.id} className={`clinic-card${tool.featured ? ' featured' : ''}`}>
+                        <span className="clinic-ic"><Icon size={20} /></span>
+                        <div className="clinic-card-body">
+                          <strong>{tool.title}</strong>
+                          <span>{tool.desc}</span>
+                        </div>
+                        <button type="button" className="clinic-go" onClick={() => createArtifact(tool.artifact)} disabled={!studySet || !!busy}>
+                          {busy === 'artifact' ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}
+                          {tool.cta}
+                        </button>
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             ) : page === 'kit' ? (
