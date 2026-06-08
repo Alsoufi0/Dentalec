@@ -591,6 +591,22 @@ function parseCardsFromText(text) {
   }
 
   const cards = [];
+
+  // Markdown table: | question | answer |  (models sometimes ignore the JSON ask)
+  const tableRows = text.split('\n').map((l) => l.trim()).filter((l) => /^\|.*\|$/.test(l));
+  if (tableRows.length >= 2) {
+    const rows = tableRows.map((l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()));
+    for (const r of rows) {
+      if (r.length < 2) continue;
+      if (/^[-:\s]+$/.test(r[0])) continue; // separator row
+      if (/^(question|front|term|q|card)$/i.test(r[0])) continue; // header row
+      const q = r[0].replace(/\*\*/g, '').trim();
+      const a = r.slice(1).join(' ').replace(/\*\*/g, '').trim();
+      if (q && a) cards.push({ question: q, answer: a });
+    }
+    if (cards.length) return cards;
+  }
+
   const blocks = text.split(/\n\s*\n/);
   for (const block of blocks) {
     const question = block.match(/(?:Q|Question)\s*\d*\s*[:.-]\s*(.+)/i)?.[1]?.trim();

@@ -310,3 +310,8 @@
   .mode-group button { min-height: 44px; }
   .rv-tool { width: 38px; height: 38px; }
 }
+
+/* clear / delete affordances */
+:root[data-theme="dark"] .clear-button, :root[data-theme="dark"] .msg-del { color: #ff9bab; }
+:root[data-theme="dark"] .clear-button:hover, :root[data-theme="dark"] .msg-del:hover { border-color: rgba(255, 107, 129, 0.45); background: rgba(255, 107, 129, 0.14); color: #fff; }
+:root[data-theme="dark"] .msg-del { margin-left: auto; }

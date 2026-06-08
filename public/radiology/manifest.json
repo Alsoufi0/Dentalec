@@ -19,11 +19,12 @@
         "Check for third molars and their angulation"
       ],
       "annotations": [
-        { "id": "condyle-l", "x": 13, "y": 22, "level": "beginner", "tone": "opaque", "structure": "Mandibular condyle", "note": "Rounded head of the mandible in the joint. Compare both sides for symmetry." },
-        { "id": "sinus-l", "x": 34, "y": 33, "level": "beginner", "tone": "lucent", "structure": "Maxillary sinus", "note": "Air-filled radiolucency above the upper molars. A normal landmark, not a lesion." },
-        { "id": "sinus-r", "x": 66, "y": 33, "level": "intermediate", "tone": "lucent", "structure": "Maxillary sinus", "note": "Paired sinus on the opposite side; the floor often dips between roots." },
-        { "id": "canal", "x": 26, "y": 64, "level": "intermediate", "tone": "lucent", "structure": "Inferior alveolar canal", "note": "Radiolucent band carrying the nerve through the mandible. Map it before lower-molar surgery." },
-        { "id": "ramus", "x": 16, "y": 55, "level": "advanced", "tone": "opaque", "structure": "Mandibular ramus", "note": "Vertical bony plate; assess width and any radiolucent or radiopaque lesions." }
+        { "id": "sinus-l", "x": 27, "y": 22, "level": "beginner", "tone": "lucent", "structure": "Maxillary sinus", "note": "Air-filled radiolucency above the upper molars. A normal landmark, not a lesion." },
+        { "id": "condyle-l", "x": 11, "y": 9, "level": "beginner", "tone": "opaque", "structure": "Mandibular condyle", "note": "Rounded head of the mandible at the jaw joint. Compare both sides for symmetry." },
+        { "id": "nasal", "x": 50, "y": 14, "level": "intermediate", "tone": "lucent", "structure": "Nasal cavity", "note": "Central radiolucent airway above the upper front teeth, split by the nasal septum." },
+        { "id": "ramus-r", "x": 88, "y": 24, "level": "intermediate", "tone": "opaque", "structure": "Mandibular ramus", "note": "Vertical bony plate rising to the condyle; check its width and for any lesion." },
+        { "id": "canal", "x": 24, "y": 52, "level": "advanced", "tone": "lucent", "structure": "Inferior alveolar canal", "note": "Radiolucent band carrying the nerve through the mandible. Map it before lower-molar surgery." },
+        { "id": "border", "x": 50, "y": 82, "level": "advanced", "tone": "opaque", "structure": "Lower border of mandible", "note": "The thick cortical lower border; trace it for fractures or lesions." }
       ],
       "source": { "name": "User-provided sample", "license": "Provided for in-app teaching use", "url": "" }
     },
@@ -43,11 +44,11 @@
         "Evaluate the periapical bone and the alveolar crest height"
       ],
       "annotations": [
-        { "id": "enamel", "x": 30, "y": 17, "level": "beginner", "tone": "opaque", "structure": "Enamel / crown", "note": "Bright outer crown of the molar. Scan the contact points for dark carious notches." },
-        { "id": "pulp", "x": 32, "y": 38, "level": "beginner", "tone": "lucent", "structure": "Pulp chamber", "note": "Dark central space; note its size relative to caries or restorations." },
-        { "id": "furcation", "x": 33, "y": 56, "level": "intermediate", "tone": "lucent", "structure": "Furcation", "note": "Where the molar roots divide. Radiolucency here can mean furcation bone loss." },
-        { "id": "crest", "x": 50, "y": 42, "level": "intermediate", "tone": "opaque", "structure": "Alveolar crest", "note": "Bone level between teeth. Compare against the cemento-enamel junctions." },
-        { "id": "apex", "x": 33, "y": 82, "level": "advanced", "tone": "finding", "structure": "Periapical region", "note": "Check each apex for a radiolucency or widened PDL suggesting apical pathology." }
+        { "id": "enamel", "x": 60, "y": 12, "level": "beginner", "tone": "opaque", "structure": "Enamel / crown", "note": "Bright outer crown of the molar. Scan the contact points for dark carious notches." },
+        { "id": "pulp", "x": 59, "y": 26, "level": "beginner", "tone": "lucent", "structure": "Pulp chamber", "note": "Dark central space; note its size relative to caries or restorations." },
+        { "id": "crest", "x": 46, "y": 39, "level": "intermediate", "tone": "opaque", "structure": "Alveolar crest", "note": "Bone level between the teeth. Compare against the cemento-enamel junctions." },
+        { "id": "furcation", "x": 61, "y": 51, "level": "intermediate", "tone": "lucent", "structure": "Furcation", "note": "Where the molar roots divide. Radiolucency here can mean furcation bone loss." },
+        { "id": "apex", "x": 55, "y": 85, "level": "advanced", "tone": "finding", "structure": "Periapical region", "note": "Check each apex for a radiolucency or widened PDL suggesting apical pathology." }
       ],
       "source": { "name": "User-provided sample", "license": "Provided for in-app teaching use", "url": "" }
     },

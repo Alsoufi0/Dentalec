@@ -47,7 +47,6 @@ import {
 import './styles.css';
 import './radiology/app-polish.css';
 
-const Tooth3D = React.lazy(() => import('./Tooth3D.jsx'));
 const Radiology = React.lazy(() => import('./Radiology.jsx'));
 import { CasesPage, RadiologyPage, InterpreterPage } from './radiology/index.jsx';
 
@@ -1055,14 +1054,7 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
                 </button>
               ))}
             </div>
-            <React.Suspense fallback={<div className="tooth3d-stage loading"><span>Loading 3D model…</span></div>}>
-              <Tooth3D
-                selected={selectedStructure}
-                onSelect={setSelectedStructure}
-                label={structure.label}
-                color={structure.color}
-              />
-            </React.Suspense>
+            <InteractiveTooth selected={selectedStructure} onSelect={setSelectedStructure} />
             <div className="structure-card">
               <strong>{structure.label}</strong>
               <span className="structure-tissue">{structure.tissue}</span>
@@ -1571,10 +1563,21 @@ function App() {
 
   function parseFlashcards(text) {
     const cards = [];
+    // Markdown table format: | question | answer |
+    const rows = text.split('\n').map((l) => l.trim()).filter((l) => /^\|.*\|$/.test(l));
+    for (const line of rows) {
+      const cells = line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      if (cells.length < 2) continue;
+      if (/^[-:\s]+$/.test(cells[0]) || /^(question|front|term|q|card)$/i.test(cells[0])) continue;
+      const q = stripMarkdown(cells[0]);
+      const a = stripMarkdown(cells.slice(1).join(' '));
+      if (q && a) cards.push({ id: crypto.randomUUID(), question: q, answer: a });
+    }
+    if (cards.length) return cards;
     const blocks = text.split(/\n\s*\n/);
     for (const block of blocks) {
-      const q = block.match(/Q:\s*(.+)/i)?.[1]?.trim();
-      const a = block.match(/A:\s*([\s\S]+)/i)?.[1]?.trim();
+      const q = block.match(/(?:Q|Question)\s*\d*\s*[:.-]\s*(.+)/i)?.[1]?.trim();
+      const a = block.match(/(?:A|Answer)\s*\d*\s*[:.-]\s*([\s\S]+)/i)?.[1]?.trim();
       if (q && a) {
         cards.push({ id: crypto.randomUUID(), question: stripMarkdown(q), answer: stripMarkdown(a) });
       }
@@ -1634,6 +1637,23 @@ function App() {
       localStorage.removeItem(stateKeyForUser(auth.user.id));
       await fetch(`${API_BASE}/session`, { method: 'DELETE', credentials: 'include' }).catch(() => {});
     }
+  }
+
+  // Clear the conversation and generated notes for a fresh start, while keeping
+  // the uploaded source and saved flashcards. Lets a student wipe what they have
+  // finished without losing their material.
+  function clearConversation() {
+    if (!chat.length && !notes) return;
+    if (!window.confirm('Clear the conversation and generated notes? Your source and saved flashcards stay.')) return;
+    stopSpeech(false);
+    setChat([]);
+    setNotes('');
+    setMessage('');
+    setError('');
+  }
+
+  function deleteMessage(id) {
+    setChat((items) => items.filter((m) => m.id !== id));
   }
 
   async function deleteSource(fileId) {
@@ -1846,7 +1866,7 @@ function App() {
             role: 'assistant',
             text: cards.length
               ? `Created ${cards.length} flashcards and saved them in the Study Kit.`
-              : data.text,
+              : 'I could not format those as flashcards. Tap Make cards to try again.',
             mode: 'summary',
             id: crypto.randomUUID()
           }
@@ -2360,6 +2380,12 @@ function App() {
                 <Sparkles size={18} />
                 Prompt
               </button>
+              {(chat.length > 0 || notes) && (
+                <button type="button" className="ghost-button clear-button" onClick={clearConversation} title="Clear the conversation and notes">
+                  <Trash2 size={18} />
+                  Clear
+                </button>
+              )}
               <button type="button" className="ghost-button" onClick={logout}>
                 Sign out
               </button>
@@ -2867,18 +2893,24 @@ function App() {
             {modes.some((modeItem) => modeItem.id === page) && visibleChat.map((item) => (
               <article key={item.id} className={`message ${item.role}`}>
                 {item.role === 'assistant' ? <ResponseContent text={item.text} mode={item.mode} /> : <p>{item.text}</p>}
-                {item.role === 'assistant' && (
-                  <div className="message-actions">
-                    <button type="button" className="listen" onClick={() => speak(item)}>
-                      {speakingId === item.id ? <Pause size={16} /> : <Volume2 size={16} />}
-                      {speakingId === item.id ? 'Stop' : 'Listen'}
-                    </button>
-                    <button type="button" className="listen" onClick={() => createArtifact('flashcards', item.text)} disabled={!!busy}>
-                      <BookmarkPlus size={16} />
-                      Cards
-                    </button>
-                  </div>
-                )}
+                <div className="message-actions">
+                  {item.role === 'assistant' && (
+                    <>
+                      <button type="button" className="listen" onClick={() => speak(item)}>
+                        {speakingId === item.id ? <Pause size={16} /> : <Volume2 size={16} />}
+                        {speakingId === item.id ? 'Stop' : 'Listen'}
+                      </button>
+                      <button type="button" className="listen" onClick={() => createArtifact('flashcards', item.text)} disabled={!!busy}>
+                        <BookmarkPlus size={16} />
+                        Cards
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="listen msg-del" onClick={() => deleteMessage(item.id)} title="Delete this message">
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </div>
               </article>
             ))}
             {busy === 'study' && (
