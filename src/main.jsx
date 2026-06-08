@@ -41,6 +41,7 @@ import {
   Upload,
   UserPlus,
   Volume2,
+  XCircle,
   Zap
 } from 'lucide-react';
 import './styles.css';
@@ -385,7 +386,105 @@ function AnswerSection({ title, blocks, mode, defaultOpen }) {
   );
 }
 
+// Pull multiple-choice questions out of an AI answer so they can be answered
+// interactively. Tolerates common formats: an optional vignette/stem, lettered
+// options (A) / A. / A:), an "Answer: X" line, and an "Explanation:" line.
+function parseQuizQuestions(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim());
+  const questions = [];
+  let stem = []; let opts = []; let answer = null; let exp = [];
+  const flush = () => {
+    if (opts.length >= 2) {
+      questions.push({
+        question: stem.join(' ').replace(/^\**\s*(?:Q(?:uestion)?\s*\d*[:.)\-]?\s*|\d+[.)]\s*)/i, '').replace(/\*\*/g, '').trim(),
+        options: opts,
+        answer,
+        explanation: exp.join(' ').replace(/\*\*/g, '').trim()
+      });
+    }
+    stem = []; opts = []; answer = null; exp = [];
+  };
+  for (const raw of lines) {
+    if (!raw) continue;
+    const opt = raw.match(/^(?:[-*]\s*)?\(?([A-E])[).:]\s+(.+)$/);
+    const ans = raw.match(/^\**\s*(?:correct\s+answer|answer|correct)\s*\**\s*[:\-]?\s*\(?([A-E])\b/i);
+    const expl = raw.match(/^\**\s*explanation\s*\**\s*[:\-]?\s*(.*)$/i);
+    if (opt) { opts.push({ key: opt[1].toUpperCase(), text: opt[2].replace(/\*\*/g, '').trim() }); continue; }
+    if (ans) { answer = ans[1].toUpperCase(); continue; }
+    if (expl) { exp.push(expl[1]); continue; }
+    if (opts.length) {
+      if (answer || exp.length) { flush(); stem.push(raw); }
+      else { exp.push(raw); }
+    } else {
+      stem.push(raw);
+    }
+  }
+  flush();
+  return questions.filter((q) => q.question);
+}
+
+function MCQCard({ q, index, onResult }) {
+  const [picked, setPicked] = useState(null);
+  const answered = picked !== null;
+  const choose = (key) => {
+    if (answered) return;
+    setPicked(key);
+    if (onResult) onResult(index, q.answer ? key === q.answer : null);
+  };
+  return (
+    <div className={`mcq${answered ? ' answered' : ''}`}>
+      <div className="mcq-q"><span className="mcq-num">{index + 1}</span><p><InlineText text={q.question} /></p></div>
+      <div className="mcq-opts">
+        {q.options.map((o) => {
+          const isCorrect = q.answer && o.key === q.answer;
+          const isPicked = o.key === picked;
+          const cls = answered ? (isCorrect ? 'correct' : isPicked ? 'wrong' : 'dim') : '';
+          return (
+            <button key={o.key} type="button" className={`mcq-opt ${cls}`} onClick={() => choose(o.key)} disabled={answered}>
+              <span className="mcq-key">{o.key}</span>
+              <span className="mcq-text"><InlineText text={o.text} /></span>
+              {answered && isCorrect && <CheckCircle2 size={16} className="mcq-ic ok" />}
+              {answered && isPicked && !isCorrect && <XCircle size={16} className="mcq-ic no" />}
+            </button>
+          );
+        })}
+      </div>
+      {answered && q.explanation && (
+        <div className="mcq-exp"><strong>Why:</strong> <InlineText text={q.explanation} /></div>
+      )}
+    </div>
+  );
+}
+
+function InteractiveQuiz({ questions }) {
+  const [results, setResults] = useState({});
+  const onResult = (i, ok) => setResults((r) => ({ ...r, [i]: ok }));
+  const answered = Object.keys(results).length;
+  const gradable = Object.values(results).filter((v) => v !== null).length;
+  const correct = Object.values(results).filter((v) => v === true).length;
+  return (
+    <div className="quiz">
+      <div className="quiz-head">
+        <span><CircleHelp size={15} /> Quick quiz</span>
+        <strong>{answered} of {questions.length} answered{gradable ? ` · ${correct}/${gradable} correct` : ''}</strong>
+      </div>
+      {questions.map((q, i) => <MCQCard key={i} q={q} index={i} onResult={onResult} />)}
+    </div>
+  );
+}
+
 function ResponseContent({ text, mode }) {
+  // If the answer is a set of multiple-choice questions, let the student
+  // actually answer them with instant feedback instead of reading the key.
+  const quiz = parseQuizQuestions(text);
+  if (quiz.length >= 2 || (mode === 'test' && quiz.length >= 1)) {
+    return (
+      <div className={mode === 'test' ? 'answer-content test-answer' : 'answer-content'}>
+        <InteractiveQuiz questions={quiz} />
+      </div>
+    );
+  }
+
   const lines = text
     .split('\n')
     .map((line) => line.trim())
