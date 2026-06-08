@@ -2844,24 +2844,26 @@ function App() {
                         </div>
                         <button type="button" onClick={exportAnki}>Export Anki TSV</button>
                       </aside>
-                      <div className="flashcard-grid compact">
-                        {flashcards.map((card, index) => (
-                          <article className={activeCard?.id === card.id ? 'flashcard active' : 'flashcard'} key={card.id}>
-                            <button type="button" className="card-select" onClick={() => setActiveCardIndex(index)}>
-                              <span>Card {index + 1}</span>
-                              <strong>{card.question}</strong>
-                            </button>
-                            {revealedCards[card.id] && <p>{card.answer}</p>}
-                            <div className="card-actions">
-                              <button type="button" onClick={() => toggleCard(card.id)}>
-                                {revealedCards[card.id] ? 'Hide' : 'Show'}
+                      <details className="flash-browse">
+                        <summary>Browse all {flashcards.length} cards</summary>
+                        <div className="flashcard-grid compact scroll">
+                          {flashcards.map((card, index) => (
+                            <article className={activeCard?.id === card.id ? 'flashcard active' : 'flashcard'} key={card.id}>
+                              <button type="button" className="card-select" onClick={() => setActiveCardIndex(index)}>
+                                <span>Card {index + 1}</span>
+                                <strong>{card.question}</strong>
                               </button>
-                              <button type="button" onClick={() => reviewCard(card.id, 'good')}>Good</button>
-                              <button type="button" onClick={() => removeCard(card.id)}>Remove</button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
+                              {revealedCards[card.id] && <p>{card.answer}</p>}
+                              <div className="card-actions">
+                                <button type="button" onClick={() => toggleCard(card.id)}>
+                                  {revealedCards[card.id] ? 'Hide' : 'Show'}
+                                </button>
+                                <button type="button" onClick={() => removeCard(card.id)}>Remove</button>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </details>
                     </div>
                   ) : (
                     <p className="muted">No flashcards yet. Use Make cards or the Cards button under a tutor answer.</p>

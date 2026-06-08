@@ -315,3 +315,28 @@
 :root[data-theme="dark"] .clear-button, :root[data-theme="dark"] .msg-del { color: #ff9bab; }
 :root[data-theme="dark"] .clear-button:hover, :root[data-theme="dark"] .msg-del:hover { border-color: rgba(255, 107, 129, 0.45); background: rgba(255, 107, 129, 0.14); color: #fff; }
 :root[data-theme="dark"] .msg-del { margin-left: auto; }
+
+/* ---- App-like shell: bound the desktop layout to the viewport so content
+   scrolls INSIDE panels instead of growing the page (no endless pages). ---- */
+@media (min-width: 921px) {
+  .workspace { height: calc(100vh - 32px); min-height: 0; }
+  .study-panel { overflow-y: auto; }
+  .chat-panel { min-height: 0; }
+}
+/* Flashcard browse list stays compact + scrolls internally */
+.flash-browse { margin-top: 4px; border-top: 1px solid var(--c-line, #232c3d); padding-top: 10px; }
+.flash-browse > summary { cursor: pointer; color: var(--c-accent, #36d6c3); font-weight: 700; font-size: 0.82rem; list-style: none; padding: 4px 2px; }
+.flash-browse > summary::-webkit-details-marker { display: none; }
+.flash-browse > summary::before { content: '▸ '; }
+.flash-browse[open] > summary::before { content: '▾ '; }
+.flashcard-grid.scroll { max-height: 320px; overflow-y: auto; margin-top: 10px; padding-right: 4px; }
+
+/* ---- Mobile app shell: bound to viewport, content scrolls inside (no endless
+   pages). Nav stays at top; the messages/content area scrolls internally. ---- */
+@media (max-width: 920px) {
+  .app-shell { padding: 0; }
+  .workspace { height: 100vh; height: 100dvh; min-height: 0; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); gap: 0; }
+  .study-panel { position: sticky; top: 0; z-index: 6; }
+  .chat-panel { min-height: 0; border-radius: 0; }
+  .messages { -webkit-overflow-scrolling: touch; }
+}
