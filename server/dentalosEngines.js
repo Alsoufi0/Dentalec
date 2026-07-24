@@ -39,7 +39,7 @@ export const dentalosEngines = {
     mode: 'visualLearning',
     outputLimit: 2200,
     prompt:
-      'Convert the topic into VISUAL structures the app renders graphically. Write every flowchart, decision tree, pathway, and algorithm as an arrow chain on its own line using exactly this notation: Step -> Next -> Result (for example: Symptom -> Test -> Finding -> Diagnosis). Use Markdown tables for every comparison. Lead with the single most important pathway. Keep prose to a minimum; the output should be mostly arrow chains and tables, not paragraphs.'
+      'Convert the topic into VISUAL structures the app renders graphically. Output one or more diagrams inside fenced ```mermaid code blocks using valid Mermaid syntax: use "flowchart TD" for processes, decision trees, pathways, and algorithms, and "mindmap" for how sub-topics branch from the main topic. Keep node labels short (a few words), avoid parentheses and special characters inside node text, and quote any label that needs them. Add Markdown tables for comparisons and classifications. Lead with the single most important diagram. Keep prose to a minimum; the output should be mostly diagrams and tables, not paragraphs.'
   },
   memoryPlan: {
     label: 'Memory Engine',

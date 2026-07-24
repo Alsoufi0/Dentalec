@@ -658,3 +658,28 @@
   :root[data-theme="dark"] .study-path-step { grid-template-columns: 26px 1fr; }
   :root[data-theme="dark"] .study-path-step .sp-action { grid-column: 2; justify-self: start; margin-top: 6px; }
 }
+
+/* ============ Learn 3-mode views: mermaid diagrams + summarize header ======= */
+
+/* Mermaid visual diagrams (Ask mode) */
+:root[data-theme="dark"] .mermaid-diagram {
+  margin: 12px 0; padding: 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 14px;
+  background: var(--c-panel, #111722); overflow-x: auto; text-align: center;
+}
+:root[data-theme="dark"] .mermaid-diagram svg { max-width: 100%; height: auto; }
+:root[data-theme="dark"] .mermaid-loading { margin: 12px 0; padding: 16px; border: 1px dashed var(--c-line-2, #2e3950); border-radius: 12px; color: var(--c-muted, #8794ab); font-size: 0.84rem; }
+:root[data-theme="dark"] .mermaid-fallback {
+  margin: 12px 0; padding: 12px 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 12px;
+  background: var(--c-bg, #0a0e14); color: var(--c-muted, #99a6bb); font-size: 0.8rem; line-height: 1.5;
+  white-space: pre-wrap; overflow-x: auto;
+}
+
+/* Summarize mode: generate/regenerate header */
+:root[data-theme="dark"] .learn-summary-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  padding: 14px 16px; margin: 10px 0 4px; border: 1px solid var(--c-line, #232c3d); border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--c-panel, #111722);
+}
+:root[data-theme="dark"] .learn-summary-head strong { display: block; font-size: 1rem; color: var(--c-text, #e8eef9); }
+:root[data-theme="dark"] .learn-summary-head span { display: block; color: var(--c-muted, #8794ab); font-size: 0.83rem; margin-top: 3px; }
+:root[data-theme="dark"] .learn-summary-head .primary-chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }

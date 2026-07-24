@@ -477,6 +477,59 @@ function InteractiveQuiz({ questions }) {
   );
 }
 
+// Lazy Mermaid renderer for ```mermaid diagrams in the visual (Ask) mode.
+// Mermaid loads only when a diagram actually appears on screen.
+let mermaidPromise;
+function MermaidBlock({ code }) {
+  const [svg, setSvg] = useState('');
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        mermaidPromise ??= import('mermaid').then((m) => {
+          const mermaid = m.default;
+          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', flowchart: { useMaxWidth: true } });
+          return mermaid;
+        });
+        const mermaid = await mermaidPromise;
+        const id = 'mmd-' + Math.random().toString(36).slice(2, 10);
+        const { svg: out } = await mermaid.render(id, code.trim());
+        if (alive) setSvg(out);
+      } catch {
+        if (alive) setFailed(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [code]);
+  if (failed) return <pre className="mermaid-fallback">{code.trim()}</pre>;
+  if (!svg) return <div className="mermaid-loading">Rendering diagram...</div>;
+  return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+// Split raw answer text into ordered text / mermaid segments so a diagram
+// renders as SVG while the surrounding prose and tables render normally.
+function splitMermaid(text) {
+  const segments = [];
+  const re = /```mermaid\s*\n?([\s\S]*?)```/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) segments.push({ type: 'text', text: text.slice(last, match.index) });
+    segments.push({ type: 'mermaid', code: match[1] });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) segments.push({ type: 'text', text: text.slice(last) });
+  return segments;
+}
+
+// Render a plain text segment as flat blocks (used alongside mermaid diagrams).
+function renderTextSegment(text, mode, keyPrefix) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  return buildContentBlocks(lines).map((block, index) => <RenderBlock key={`${keyPrefix}-${index}`} block={block} mode={mode} />);
+}
+
 function ResponseContent({ text, mode }) {
   const [openSignal, setOpenSignal] = useState(null);
 
@@ -487,6 +540,20 @@ function ResponseContent({ text, mode }) {
     return (
       <div className="answer-content test-answer">
         <InteractiveQuiz questions={quiz} />
+      </div>
+    );
+  }
+
+  // Visual answers with mermaid diagrams render segment by segment (diagram as
+  // SVG, prose and tables as usual). No collapsible sections in this path.
+  if (text.includes('```mermaid')) {
+    return (
+      <div className="answer-content">
+        {splitMermaid(text).map((seg, index) => (
+          seg.type === 'mermaid'
+            ? <MermaidBlock key={`mmd-${index}`} code={seg.code} />
+            : <React.Fragment key={`txt-${index}`}>{renderTextSegment(seg.text, mode, index)}</React.Fragment>
+        ))}
       </div>
     );
   }
@@ -1929,22 +1996,29 @@ function App() {
 
       const testArtifacts = ['weakQuiz', 'caseStudy', 'osce', 'examinerQuestions', 'clinicalCase'];
       const kitArtifacts = ['notes', 'adaptivePlan', 'curriculumMap', 'clinicalVisionChecklist', 'mnemonics', 'memoryPlan'];
+      const visualArtifacts = ['visualLearning', 'differentialDiagnosis', 'treatmentProtocol', 'radiologyChecklist', 'knowledgeGap', 'conceptMap'];
+      // The mode tag decides which Learn view the result appears in: quizzes/cases
+      // go to Practice, visual aids to Learn > Ask, reading aids to Learn > Summarize.
+      let landingMode;
       if (testArtifacts.includes(type)) {
-        // Quizzes go to the Quiz tab; worked cases go to the Clinical cases tab.
         const kind = (type === 'examinerQuestions' || type === 'weakQuiz') ? 'quiz' : 'cases';
+        landingMode = 'test';
         setMode('test');
         setPracticeTab(kind);
         setLastPracticeKind(kind);
         setPage('practice');
+      } else if (visualArtifacts.includes(type)) {
+        landingMode = 'answer';
+        setMode('answer');
+        setPage('learn');
       } else {
-        // Reading-type aids (differentials, protocols, notes, plans) land in the
-        // Learn conversation.
         if (kitArtifacts.includes(type)) writer.setNotes(data.text);
+        landingMode = 'summary';
         setMode('summary');
         setPage('learn');
       }
 
-      writer.setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: makeId() }]);
+      writer.setChat((items) => [...items, { role: 'assistant', text: data.text, mode: landingMode, id: makeId() }]);
     } catch (artifactError) {
       setError(artifactError.message);
     } finally {
@@ -2955,19 +3029,55 @@ function App() {
                       <button key={m} type="button" className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>{label}</button>
                     ))}
                   </div>
-                  <div className="learn-aids-row">
-                    <span className="learn-aids-label">Study aids</span>
-                    <button type="button" onClick={startSummary} disabled={!!busy}>Summary</button>
-                    <button type="button" onClick={() => createArtifact('differentialDiagnosis')} disabled={!!busy}>Key differences</button>
-                    <button type="button" onClick={() => createArtifact('visualLearning')} disabled={!!busy}>Concept map</button>
-                    <button type="button" onClick={() => createArtifact('knowledgeGap')} disabled={!!busy}>Knowledge gaps</button>
-                    <button type="button" onClick={() => createArtifact('treatmentProtocol')} disabled={!!busy}>Treatment protocol</button>
-                    <button type="button" onClick={() => createArtifact('radiologyChecklist')} disabled={!!busy}>Radiology checklist</button>
-                  </div>
-                  {chat.length === 0 && (
-                    <p className="learn-hint">Ask a question below, or tap a study aid. Everything stays in this one conversation, and switching Ask / Explain / Summarize never clears it.</p>
-                  )}
-                  {renderMessages(chat)}
+                  {(() => {
+                    const learnChat = chat.filter((item) => (item.mode || 'answer') === mode);
+                    if (mode === 'answer') {
+                      return (
+                        <>
+                          <div className="learn-aids-row">
+                            <span className="learn-aids-label">Study aids</span>
+                            <button type="button" onClick={() => createArtifact('visualLearning')} disabled={!!busy}>Concept map</button>
+                            <button type="button" onClick={() => createArtifact('differentialDiagnosis')} disabled={!!busy}>Key differences</button>
+                            <button type="button" onClick={() => createArtifact('knowledgeGap')} disabled={!!busy}>Knowledge gaps</button>
+                            <button type="button" onClick={() => createArtifact('treatmentProtocol')} disabled={!!busy}>Treatment protocol</button>
+                            <button type="button" onClick={() => createArtifact('radiologyChecklist')} disabled={!!busy}>Radiology checklist</button>
+                          </div>
+                          {learnChat.length === 0 && (
+                            <p className="learn-hint">Ask a question and get it back as a table or diagram, or tap a study aid. This is the visual mode. Switching modes never deletes anything.</p>
+                          )}
+                          {renderMessages(learnChat)}
+                        </>
+                      );
+                    }
+                    if (mode === 'explanation') {
+                      return (
+                        <>
+                          {learnChat.length === 0 && (
+                            <p className="learn-hint">Have a back-and-forth with your tutor, like a normal chat. Ask anything about your source.</p>
+                          )}
+                          {renderMessages(learnChat)}
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="learn-summary-head">
+                          <div>
+                            <strong>Summary</strong>
+                            <span>A full, structured summary of your active source.</span>
+                          </div>
+                          <button type="button" className="primary-chip" onClick={startSummary} disabled={!!busy}>
+                            {busy === 'study' ? <Loader2 size={15} className="spin" /> : <BookOpen size={15} />}
+                            {learnChat.some((item) => item.role === 'assistant') ? 'Regenerate summary' : 'Generate full summary'}
+                          </button>
+                        </div>
+                        {learnChat.length === 0 && (
+                          <p className="learn-hint">Generate a full summary above, or type a specific topic below to summarize just that part.</p>
+                        )}
+                        {renderMessages(learnChat)}
+                      </>
+                    );
+                  })()}
                 </section>
               )
             ) : page === 'practice' ? (
@@ -3180,10 +3290,10 @@ function App() {
                 mode === 'test'
                   ? 'Answer a quiz question, ask for a harder case, or say "test me on caries"...'
                   : mode === 'summary'
-                    ? 'Ask for a summary, or type a topic to summarize...'
+                    ? 'Or summarize a specific topic, like "summarize periodontal risk"...'
                     : mode === 'explanation'
-                      ? 'Ask the tutor to explain a topic in depth...'
-                      : 'Ask about caries, mental foramen landmarks, enamel formation, cavity classes...'
+                      ? 'Ask the tutor to explain a topic, like a normal chat...'
+                      : 'Ask for a table, map, or diagram of any topic from your source...'
               }
               rows={2}
               disabled={!studySet}
