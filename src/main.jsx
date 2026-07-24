@@ -185,6 +185,17 @@ function stateKeyForUser(userId) {
   return `${STORAGE_KEY}:${userId}`;
 }
 
+// crypto.randomUUID is only available in secure contexts; fall back to a
+// timestamp-random id so the app never crashes on plain-http access.
+function makeId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function emptySourceData() {
+  return { chat: [], flashcards: [], notes: '' };
+}
+
 function InlineText({ text }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, index) => {
@@ -363,18 +374,33 @@ function RenderBlock({ block, mode }) {
   return <p><InlineText text={heading} /></p>;
 }
 
+// A short text preview of what sits inside a collapsed section, so students
+// can see the content is there instead of guessing from a bare count.
+function sectionPreview(blocks) {
+  for (const block of blocks) {
+    if (block.type !== 'line') continue;
+    const text = stripMarkdown(block.line).trim();
+    if (text) return text.length > 140 ? `${text.slice(0, 140).trim()}...` : text;
+  }
+  if (blocks.some((block) => block.type === 'table')) return 'Includes a comparison table.';
+  return '';
+}
+
 // A collapsible section of an answer. Lets a student scan headings and open
 // only what they need instead of reading everything at once.
-function AnswerSection({ title, blocks, mode, defaultOpen }) {
+function AnswerSection({ title, blocks, mode, defaultOpen, openSignal }) {
   const [open, setOpen] = useState(defaultOpen);
-  const preview = blocks.length;
+  useEffect(() => {
+    if (openSignal?.n) setOpen(openSignal.open);
+  }, [openSignal?.n]);
+  const preview = sectionPreview(blocks);
   return (
     <section className={`answer-section${open ? ' open' : ''}`}>
       <button type="button" className="answer-section-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <ChevronRight size={16} className="sec-caret" />
         <span><InlineText text={title} /></span>
-        {!open && preview > 0 && <em className="sec-count">{preview}</em>}
       </button>
+      {!open && preview && <em className="sec-preview">{preview}</em>}
       {open && (
         <div className="answer-section-body">
           {blocks.map((block, index) => <RenderBlock key={index} block={block} mode={mode} />)}
@@ -472,12 +498,14 @@ function InteractiveQuiz({ questions }) {
 }
 
 function ResponseContent({ text, mode }) {
-  // If the answer is a set of multiple-choice questions, let the student
-  // actually answer them with instant feedback instead of reading the key.
-  const quiz = parseQuizQuestions(text);
-  if (quiz.length >= 2 || (mode === 'test' && quiz.length >= 1)) {
+  const [openSignal, setOpenSignal] = useState(null);
+
+  // Only test-mode content becomes an interactive quiz. Explanations and
+  // summaries that happen to contain lettered lists stay readable prose.
+  const quiz = mode === 'test' ? parseQuizQuestions(text) : [];
+  if (mode === 'test' && quiz.length >= 1) {
     return (
-      <div className={mode === 'test' ? 'answer-content test-answer' : 'answer-content'}>
+      <div className="answer-content test-answer">
         <InteractiveQuiz questions={quiz} />
       </div>
     );
@@ -530,11 +558,21 @@ function ResponseContent({ text, mode }) {
     }
   }
 
+  const allOpen = openSignal?.open === true;
   return (
     <div className={wrapClass}>
       {intro.map((block, index) => <RenderBlock key={`intro-${index}`} block={block} mode={mode} />)}
+      <div className="answer-expand-row">
+        <button
+          type="button"
+          className="answer-expand-all"
+          onClick={() => setOpenSignal({ open: !allOpen, n: (openSignal?.n || 0) + 1 })}
+        >
+          {allOpen ? 'Collapse all sections' : 'Expand all sections'}
+        </button>
+      </div>
       {sections.map((section, index) => (
-        <AnswerSection key={`sec-${index}`} title={section.title} blocks={section.blocks} mode={mode} defaultOpen={index === 0} />
+        <AnswerSection key={`sec-${index}`} title={section.title} blocks={section.blocks} mode={mode} defaultOpen={index === 0} openSignal={openSignal} />
       ))}
     </div>
   );
@@ -1137,9 +1175,15 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
   );
 }
 
+const MAX_CHAT = 200;
+const EMPTY_CHAT = [];
+const EMPTY_CARDS = [];
+
 function App() {
   const [files, setFiles] = useState([]);
-  const [studySet, setStudySet] = useState(null);
+  const [sources, setSources] = useState([]);
+  const [activeSourceId, setActiveSourceId] = useState(null);
+  const [sourceData, setSourceData] = useState({});
   const [mode, setMode] = useState('answer');
   const [page, setPage] = useState('dashboard');
   const [radCaseId, setRadCaseId] = useState(null);
@@ -1147,9 +1191,6 @@ function App() {
   const [message, setMessage] = useState('');
   const [textSourceTitle, setTextSourceTitle] = useState('');
   const [textSource, setTextSource] = useState('');
-  const [chat, setChat] = useState([]);
-  const [flashcards, setFlashcards] = useState([]);
-  const [notes, setNotes] = useState('');
   const [learning, setLearning] = useState({ reviews: {}, confidence: {}, milestones: [] });
   const [revealedCards, setRevealedCards] = useState({});
   const [activeCardIndex, setActiveCardIndex] = useState(0);
@@ -1167,6 +1208,7 @@ function App() {
   const [speakingId, setSpeakingId] = useState(null);
   const [conversationMode, setConversationMode] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Ready');
+  const [authBusy, setAuthBusy] = useState(false);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
   const audioRef = useRef(null);
@@ -1181,6 +1223,43 @@ function App() {
   const pauseRecognitionRef = useRef(false);
   const restartTimerRef = useRef(null);
   const lastTutorSpeechRef = useRef('');
+  const speechWatchdogRef = useRef(null);
+  const activeKeyRef = useRef('unassigned');
+
+  // Each source keeps its own chat, flashcards, and notes. The derived
+  // studySet keeps the many existing consumers of the old single-set shape
+  // working without edits.
+  const activeSource = useMemo(() => sources.find((source) => source.id === activeSourceId) || null, [sources, activeSourceId]);
+  const studySet = useMemo(
+    () => (activeSource ? { vectorStoreId: activeSource.vectorStoreId, files: activeSource.files || [] } : null),
+    [activeSource]
+  );
+  const activeData = sourceData[activeSourceId || 'unassigned'];
+  const chat = activeData?.chat || EMPTY_CHAT;
+  const flashcards = activeData?.flashcards || EMPTY_CARDS;
+  const notes = activeData?.notes || '';
+
+  useEffect(() => {
+    activeKeyRef.current = activeSourceId || 'unassigned';
+  }, [activeSourceId]);
+
+  function applyActiveSourceId(id) {
+    activeKeyRef.current = id || 'unassigned';
+    setActiveSourceId(id || null);
+  }
+
+  function updateActiveSourceData(field, next, transform) {
+    setSourceData((data) => {
+      const key = activeKeyRef.current;
+      const current = data[key] || emptySourceData();
+      const raw = typeof next === 'function' ? next(current[field]) : next;
+      return { ...data, [key]: { ...current, [field]: transform ? transform(raw) : raw } };
+    });
+  }
+
+  const setChat = (next) => updateActiveSourceData('chat', next, (value) => (Array.isArray(value) ? value.slice(-MAX_CHAT) : []));
+  const setFlashcards = (next) => updateActiveSourceData('flashcards', next, (value) => (Array.isArray(value) ? value.slice(0, 300) : []));
+  const setNotes = (next) => updateActiveSourceData('notes', next, (value) => String(value || ''));
 
   const fileNames = useMemo(() => studySet?.files?.map((file) => file.originalName).join(', '), [studySet]);
   const sourceKind = useMemo(() => {
@@ -1257,6 +1336,12 @@ function App() {
     }
   }, [activeCardIndex, flashcards.length]);
 
+  // Switching source switches to that source's own deck and chat.
+  useEffect(() => {
+    setActiveCardIndex(0);
+    setRevealedCards({});
+  }, [activeSourceId]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
@@ -1273,10 +1358,37 @@ function App() {
   }, []);
 
   function applyStudyState(saved = {}) {
-    setStudySet(saved.studySet || null);
-    setChat(Array.isArray(saved.chat) ? saved.chat : []);
-    setFlashcards(Array.isArray(saved.flashcards) ? saved.flashcards : []);
-    setNotes(typeof saved.notes === 'string' ? saved.notes : '');
+    let nextSources = Array.isArray(saved.sources) ? saved.sources : [];
+    let nextActiveId = saved.activeSourceId || null;
+    let nextData = saved.sourceData && typeof saved.sourceData === 'object' ? saved.sourceData : {};
+
+    // Legacy local copy from before multi-source support: wrap the single
+    // study set the same way the server does. The next server load replaces
+    // this with canonical ids.
+    if (!nextSources.length && saved.studySet?.vectorStoreId) {
+      const legacyId = 'legacy-local';
+      nextSources = [{
+        id: legacyId,
+        title: saved.studySet.files?.[0]?.originalName || 'My study set',
+        sourceType: 'pdf',
+        vectorStoreId: saved.studySet.vectorStoreId,
+        files: saved.studySet.files || [],
+        textChars: 0,
+        createdAt: saved.updatedAt || new Date().toISOString()
+      }];
+      nextActiveId = legacyId;
+      nextData = {
+        [legacyId]: {
+          chat: Array.isArray(saved.chat) ? saved.chat : [],
+          flashcards: Array.isArray(saved.flashcards) ? saved.flashcards : [],
+          notes: typeof saved.notes === 'string' ? saved.notes : ''
+        }
+      };
+    }
+
+    setSources(nextSources);
+    applyActiveSourceId(nextSources.some((source) => source.id === nextActiveId) ? nextActiveId : nextSources[0]?.id || null);
+    setSourceData(nextData);
     setLearning(saved.learning && typeof saved.learning === 'object' ? saved.learning : { reviews: {}, confidence: {}, milestones: [] });
     setVoicePersona(saved.voicePersona || 'peer');
     setPage(saved.page || 'dashboard');
@@ -1315,16 +1427,24 @@ function App() {
   useEffect(() => {
     if (!auth.user?.id || !sessionLoaded) return;
 
-    const body = {
-      studySet,
-      chat,
-      flashcards,
-      notes,
-      page,
-      voicePersona,
-      learning
-    };
-    localStorage.setItem(stateKeyForUser(auth.user.id), JSON.stringify(body));
+    // The server owns sources and the active source; the client only persists
+    // its per-source study data plus preferences. localStorage keeps a full
+    // copy so an offline reload still shows the library.
+    const body = { sourceData, page, voicePersona, learning };
+    const localCopy = { sources, activeSourceId, ...body };
+    try {
+      localStorage.setItem(stateKeyForUser(auth.user.id), JSON.stringify(localCopy));
+    } catch {
+      // Storage is full: retry with trimmed chats, then give up quietly.
+      try {
+        const slimData = Object.fromEntries(
+          Object.entries(sourceData).map(([key, value]) => [key, { ...value, chat: (value.chat || []).slice(-40) }])
+        );
+        localStorage.setItem(stateKeyForUser(auth.user.id), JSON.stringify({ ...localCopy, sourceData: slimData }));
+      } catch {
+        try { localStorage.removeItem(stateKeyForUser(auth.user.id)); } catch { /* unavailable */ }
+      }
+    }
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
@@ -1341,7 +1461,7 @@ function App() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [auth.user?.id, sessionLoaded, studySet, chat, flashcards, notes, page, voicePersona, learning]);
+  }, [auth.user?.id, sessionLoaded, sources, activeSourceId, sourceData, page, voicePersona, learning]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -1369,6 +1489,7 @@ function App() {
   }, [conversationMode, studySet?.vectorStoreId]);
 
   function stopSpeech(resumeBuddy = true) {
+    window.clearTimeout(speechWatchdogRef.current);
     speechControllerRef.current?.abort();
     speechControllerRef.current = null;
     window.speechSynthesis?.cancel();
@@ -1480,7 +1601,14 @@ function App() {
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      // Recognition was already running or in a bad state; retry shortly.
+      recognitionRef.current = null;
+      window.clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = window.setTimeout(() => startStudyBuddy(), 800);
+    }
   }
 
   function stopStudyBuddy() {
@@ -1567,7 +1695,7 @@ function App() {
       if (/^[-:\s]+$/.test(cells[0]) || /^(question|front|term|q|card)$/i.test(cells[0])) continue;
       const q = stripMarkdown(cells[0]);
       const a = stripMarkdown(cells.slice(1).join(' '));
-      if (q && a) cards.push({ id: crypto.randomUUID(), question: q, answer: a });
+      if (q && a) cards.push({ id: makeId(), question: q, answer: a });
     }
     if (cards.length) return cards;
     const blocks = text.split(/\n\s*\n/);
@@ -1575,7 +1703,7 @@ function App() {
       const q = block.match(/(?:Q|Question)\s*\d*\s*[:.-]\s*(.+)/i)?.[1]?.trim();
       const a = block.match(/(?:A|Answer)\s*\d*\s*[:.-]\s*([\s\S]+)/i)?.[1]?.trim();
       if (q && a) {
-        cards.push({ id: crypto.randomUUID(), question: stripMarkdown(q), answer: stripMarkdown(a) });
+        cards.push({ id: makeId(), question: stripMarkdown(q), answer: stripMarkdown(a) });
       }
     }
     return cards;
@@ -1610,17 +1738,19 @@ function App() {
   }
 
   function exportAnki() {
-    const rows = flashcards.map((card) => `${card.question.replace(/\t/g, ' ')}\t${card.answer.replace(/\t/g, ' ')}`);
+    // Anki fields must stay on one TSV line; it renders <br> inside a field.
+    const cell = (value) => String(value || '').replace(/\t/g, ' ').replace(/\r?\n/g, '<br>');
+    const rows = flashcards.map((card) => `${cell(card.question)}\t${cell(card.answer)}`);
     downloadFile('dental-flashcards.tsv', rows.join('\n'), 'text/tab-separated-values');
   }
 
   async function clearSession() {
+    if (sources.length && !window.confirm('Remove every source, chat, and flashcard deck? This cannot be undone.')) return;
     stopSpeech(false);
     stopStudyBuddy();
-    setStudySet(null);
-    setChat([]);
-    setFlashcards([]);
-    setNotes('');
+    setSources([]);
+    applyActiveSourceId(null);
+    setSourceData({});
     setLearning({ reviews: {}, confidence: {}, milestones: [] });
     setFiles([]);
     setMessage('');
@@ -1652,9 +1782,57 @@ function App() {
     setChat((items) => items.filter((m) => m.id !== id));
   }
 
+  function applySourceListResponse(data) {
+    const nextSources = Array.isArray(data.sources) ? data.sources : [];
+    setSources(nextSources);
+    applyActiveSourceId(nextSources.some((source) => source.id === data.activeSourceId) ? data.activeSourceId : nextSources[0]?.id || null);
+    setSourceData((current) => {
+      const validKeys = new Set([...nextSources.map((source) => source.id), 'unassigned']);
+      return Object.fromEntries(Object.entries(current).filter(([key]) => validKeys.has(key)));
+    });
+    if (!nextSources.length) setPage('library');
+  }
+
+  async function activateSource(sourceId) {
+    if (!sourceId || sourceId === activeSourceId) return;
+    stopSpeech(false);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/source/activate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not switch the source.');
+      applySourceListResponse(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function deleteWholeSource(sourceId) {
+    if (!window.confirm('Remove this source and everything saved with it, including its chat and flashcards?')) return;
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/source/delete`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not remove the source.');
+      applySourceListResponse(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function deleteSource(fileId) {
     if (!studySet?.vectorStoreId) return;
-    if (!window.confirm('Remove this source from your study set?')) return;
+    if (!window.confirm('Remove this file from the source?')) return;
     setError('');
     try {
       const response = await fetch(`${API_BASE}/source/delete`, {
@@ -1665,8 +1843,7 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not remove the source.');
-      setStudySet(data.studySet);
-      if (!data.studySet) setPage('library');
+      applySourceListResponse(data);
     } catch (err) {
       setError(err.message);
     }
@@ -1677,8 +1854,9 @@ function App() {
   }
 
   function removeCard(cardId) {
-    setFlashcards((items) => items.filter((card) => card.id !== cardId));
-    setActiveCardIndex((index) => Math.max(0, Math.min(index, flashcards.length - 2)));
+    const next = flashcards.filter((card) => card.id !== cardId);
+    setFlashcards(next);
+    setActiveCardIndex((index) => Math.max(0, Math.min(index, next.length - 1)));
     setLearning((state) => {
       const reviews = { ...(state.reviews || {}) };
       delete reviews[cardId];
@@ -1749,15 +1927,16 @@ function App() {
       const response = await fetch(`${API_BASE}/upload`, { method: 'POST', body, credentials: 'include' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'PDF upload failed');
-      setStudySet(data);
+      const addedTitle = (Array.isArray(data.sources) && data.sources.find((source) => source.id === data.activeSourceId)?.title) || pdfs[0].name;
+      applySourceListResponse(data);
       setPage('dashboard');
       setMode('answer');
       setChat([
         {
           role: 'assistant',
-          text: 'Your PDF set is indexed. You can ask a question, request a summary, or switch to Test mode for an oral exam.',
+          text: `Added ${addedTitle} to your library and made it the active source. Ask a question, request a summary, or switch to Test mode for an oral exam.`,
           mode: 'answer',
-          id: crypto.randomUUID()
+          id: makeId()
         }
       ]);
       setVoiceStatus('PDF ready');
@@ -1794,7 +1973,8 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Text indexing failed');
-      setStudySet(data);
+      const addedTitle = (Array.isArray(data.sources) && data.sources.find((source) => source.id === data.activeSourceId)?.title) || textSourceTitle || 'your pasted notes';
+      applySourceListResponse(data);
       setTextSourceTitle('');
       setTextSource('');
       setPage('dashboard');
@@ -1802,9 +1982,9 @@ function App() {
       setChat([
         {
           role: 'assistant',
-          text: 'Your pasted dental material is indexed. Ask questions, generate a study plan, or start an OSCE-style drill.',
+          text: `Added ${addedTitle} to your library and made it the active source. Ask questions, generate a summary, or start an OSCE-style drill.`,
           mode: 'answer',
-          id: crypto.randomUUID()
+          id: makeId()
         }
       ]);
       setVoiceStatus('Text ready');
@@ -1837,11 +2017,12 @@ function App() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vectorStoreId: studySet.vectorStoreId,
+          sourceId: activeSourceId,
           type,
           source,
           history: chat.slice(-8).map(({ role, text }) => ({ role, text })),
-          persona: voicePersona
+          persona: voicePersona,
+          existingQuestions: type === 'flashcards' ? flashcards.map((card) => card.question).slice(0, 120) : undefined
         })
       });
       const data = await response.json();
@@ -1849,22 +2030,36 @@ function App() {
       bumpUsage('aiCalls');
 
       if (type === 'flashcards') {
-        const cards = Array.isArray(data.cards)
+        const parsed = Array.isArray(data.cards)
           ? data.cards
               .filter((card) => card?.question && card?.answer)
-              .map((card) => ({ id: crypto.randomUUID(), question: stripMarkdown(card.question), answer: stripMarkdown(card.answer) }))
+              .map((card) => ({ id: makeId(), question: stripMarkdown(card.question), answer: stripMarkdown(card.answer) }))
           : parseFlashcards(data.text);
+        // Drop any card whose question already exists, so asking for more never
+        // shows the student duplicates even if the model repeats itself.
+        const seen = new Set(flashcards.map((card) => card.question.toLowerCase().trim()));
+        const cards = parsed.filter((card) => {
+          const key = card.question.toLowerCase().trim();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
         setFlashcards((items) => [...cards, ...items]);
+        setActiveCardIndex(0);
+        setRevealedCards({});
         setPage('kit');
+        const skipped = parsed.length - cards.length;
         setChat((items) => [
           ...items,
           {
             role: 'assistant',
             text: cards.length
-              ? `Created ${cards.length} flashcards and saved them in the Study Kit.`
-              : 'I could not format those as flashcards. Tap Make cards to try again.',
+              ? `Added ${cards.length} new flashcard${cards.length > 1 ? 's' : ''} to the Study Kit${skipped ? `, and skipped ${skipped} that repeated cards you already have.` : '.'}`
+              : parsed.length
+                ? 'Those all matched flashcards you already have. Try a different part of the source, or add another source.'
+                : 'I could not format those as flashcards. Tap Make cards to try again.',
             mode: 'summary',
-            id: crypto.randomUUID()
+            id: makeId()
           }
         ]);
         return;
@@ -1885,7 +2080,7 @@ function App() {
         setMode('summary');
       }
 
-      setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: crypto.randomUUID() }]);
+      setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: makeId() }]);
     } catch (artifactError) {
       setError(artifactError.message);
     } finally {
@@ -1908,7 +2103,7 @@ function App() {
     setBusy('study');
     setError('');
     setMessage('');
-    const userItem = { role: 'user', text: trimmed, mode, id: crypto.randomUUID() };
+    const userItem = { role: 'user', text: trimmed, mode, id: makeId() };
     const history = chat.slice(-8).map(({ role, text }) => ({ role, text }));
     setChat((items) => [...items, userItem]);
 
@@ -1918,7 +2113,7 @@ function App() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vectorStoreId: studySet.vectorStoreId,
+          sourceId: activeSourceId,
           message: trimmed,
           mode,
           history,
@@ -1928,7 +2123,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Study request failed');
       bumpUsage('aiCalls');
-      const assistantItem = { role: 'assistant', text: data.text, mode, id: crypto.randomUUID() };
+      const assistantItem = { role: 'assistant', text: data.text, mode, id: makeId() };
       setChat((items) => [...items, assistantItem]);
       if (conversationMode || options.speak) {
         await speak(assistantItem, { force: true });
@@ -1997,8 +2192,8 @@ function App() {
         stopSpeech();
         setChat((items) => [
           ...items,
-          { role: 'user', text: data.text, mode, id: crypto.randomUUID() },
-          { role: 'assistant', text: 'Paused. Ask me for the next explanation, summary, or quiz when you are ready.', mode, id: crypto.randomUUID() }
+          { role: 'user', text: data.text, mode, id: makeId() },
+          { role: 'assistant', text: 'Paused. Ask me for the next explanation, summary, or quiz when you are ready.', mode, id: makeId() }
         ]);
         return;
       }
@@ -2052,19 +2247,33 @@ function App() {
       audio.oncanplay = () => setVoiceStatus('Speaking');
       audio.onended = () => {
         if (speechItemRef.current === item.id) {
+          window.clearTimeout(speechWatchdogRef.current);
           speechItemRef.current = '';
           resumeStudyBuddyAfterTutor();
         }
       };
-      audio.onerror = () => {
+      const failSpeech = () => {
         if (speechItemRef.current === item.id) {
+          window.clearTimeout(speechWatchdogRef.current);
           speechItemRef.current = '';
           tutorSpeakingRef.current = false;
+          pauseRecognitionRef.current = false;
           setVoiceStatus('Voice error');
           setSpeakingId(null);
+          if (buddyActiveRef.current) resumeStudyBuddyAfterTutor();
         }
       };
+      audio.onerror = failSpeech;
+      audio.onabort = failSpeech;
       await audio.play();
+
+      // Watchdog: if the audio stalls and never fires ended or error, force
+      // the voice state back to Ready so buttons never stay stuck.
+      const spokenWords = lastTutorSpeechRef.current.split(/\s+/).length;
+      window.clearTimeout(speechWatchdogRef.current);
+      speechWatchdogRef.current = window.setTimeout(() => {
+        if (speechItemRef.current === item.id) stopSpeech();
+      }, Math.min(120000, 15000 + spokenWords * 450));
     } catch (speechError) {
       if (speechError.name !== 'AbortError') {
         setError(speechError.message);
@@ -2092,6 +2301,8 @@ function App() {
 
   async function submitAuth(event) {
     event.preventDefault();
+    if (authBusy) return;
+    setAuthBusy(true);
     setAuthError('');
     const endpoint = authMode === 'signup' ? 'signup' : 'login';
 
@@ -2109,6 +2320,8 @@ function App() {
       setSessionLoaded(false);
     } catch (loginError) {
       setAuthError(loginError.message);
+    } finally {
+      setAuthBusy(false);
     }
   }
 
@@ -2209,8 +2422,8 @@ function App() {
                 />
               </label>
               {authError && <div className="error auth-error">{authError}</div>}
-              <button type="submit" className="auth-submit">
-                {authMode === 'signup' ? <UserPlus size={18} /> : <Sparkles size={18} />}
+              <button type="submit" className="auth-submit" disabled={authBusy}>
+                {authBusy ? <Loader2 className="spin" size={18} /> : authMode === 'signup' ? <UserPlus size={18} /> : <Sparkles size={18} />}
                 {authMode === 'signup' ? 'Create account' : 'Sign in'}
               </button>
             </form>
@@ -2251,11 +2464,12 @@ function App() {
             <strong>{auth.user.usage?.aiCalls || 0}/{auth.user.usage?.dailyAiBudget || 120} calls</strong>
           </div>
 
-          {studySet && (
-            <div className="source-strip" title={fileNames}>
-              <span>Current set</span>
-              <strong>{sourceCountLabel}</strong>
-            </div>
+          {sources.length > 0 && (
+            <button type="button" className="source-strip source-strip-btn" onClick={() => navigate('library')} title={fileNames}>
+              <span>Active source</span>
+              <strong>{activeSource?.title || 'None selected'}</strong>
+              <small>{sources.length} source{sources.length > 1 ? 's' : ''} · manage in Library</small>
+            </button>
           )}
 
           <button
@@ -2441,15 +2655,15 @@ function App() {
                 <div className="library-hero">
                   <div>
                     <p>Source Library</p>
-                    <h3>{studySet ? 'Your study set is indexed and ready' : 'Add the material you want to study from'}</h3>
+                    <h3>{sources.length ? 'Keep several sources and pick one to study' : 'Add the material you want to study from'}</h3>
                     <span>
-                      {studySet
-                        ? `${sourceCountLabel} active. Everything DentalOS generates is grounded in this material.`
+                      {sources.length
+                        ? 'Each source keeps its own chat, flashcards, and notes. Everything is grounded in the source you make active.'
                         : 'Upload lecture PDFs or paste notes, rubrics, and protocols. The tutor only answers from what you add here.'}
                     </span>
                   </div>
-                  {studySet && (
-                    <button type="button" className="danger-action" onClick={clearSession}>Remove source</button>
+                  {sources.length > 0 && (
+                    <button type="button" className="danger-action" onClick={clearSession}>Clear everything</button>
                   )}
                 </div>
 
@@ -2511,25 +2725,48 @@ function App() {
                 <div className="kit-section">
                   <div className="section-title">
                     <Library size={18} />
-                    <h3>Indexed material</h3>
+                    <h3>Your sources</h3>
+                    <span className="source-count-tag">{sources.length} of 10</span>
                   </div>
-                  {studySet ? (
-                    <div className="file-list">
-                      {studySet.files.map((file) => (
-                        <div key={file.fileId} className="file-row">
-                          <span className="file-ic"><FileText size={17} /></span>
-                          <span className="file-name">{file.originalName}</span>
-                          <span className={file.sourceType === 'text' ? 'file-badge text' : 'file-badge pdf'}>
-                            {file.sourceType === 'text' ? 'Text' : 'PDF'}
-                          </span>
-                          <button type="button" className="file-del" onClick={() => deleteSource(file.fileId)} title="Remove this source" aria-label="Remove this source">
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
+                  {sources.length ? (
+                    <div className="source-list">
+                      {sources.map((source) => (
+                        <article key={source.id} className={source.id === activeSourceId ? 'source-card active' : 'source-card'}>
+                          <div className="source-card-row">
+                            <button type="button" className="source-main" onClick={() => activateSource(source.id)} title="Study from this source">
+                              <span className="source-radio" aria-hidden="true"></span>
+                              <span className="source-info">
+                                <strong>{source.title}</strong>
+                                <small>
+                                  {source.sourceType === 'text' ? 'Pasted text' : `PDF · ${source.files?.length || 0} file${(source.files?.length || 0) > 1 ? 's' : ''}`}
+                                  {source.textChars ? ` · ${Math.max(1, Math.round(source.textChars / 1000))}k characters` : ''}
+                                </small>
+                              </span>
+                              {source.id === activeSourceId && <em className="source-active-tag">Active</em>}
+                            </button>
+                            <button type="button" className="file-del" onClick={() => deleteWholeSource(source.id)} title="Remove this source" aria-label="Remove this source">
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                          {source.sourceType !== 'text' && (source.files?.length || 0) > 1 && source.id === activeSourceId && (
+                            <div className="file-list source-files">
+                              {source.files.map((file) => (
+                                <div key={file.fileId} className="file-row">
+                                  <span className="file-ic"><FileText size={17} /></span>
+                                  <span className="file-name">{file.originalName}</span>
+                                  <span className="file-badge pdf">PDF</span>
+                                  <button type="button" className="file-del" onClick={() => deleteSource(file.fileId)} title="Remove this file" aria-label="Remove this file">
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </article>
                       ))}
                     </div>
                   ) : (
-                    <p className="muted">Upload PDFs or paste text to create a study set.</p>
+                    <p className="muted">Upload PDFs or paste text to add your first source.</p>
                   )}
                 </div>
 
@@ -2902,7 +3139,7 @@ function App() {
               type="button"
               className={recording ? 'recording icon-button' : 'icon-button'}
               onClick={conversationMode ? () => setConversationMode(false) : recording ? stopRecording : startRecording}
-              disabled={!studySet || (!!busy && busy !== 'voice') || busy === 'voice'}
+              disabled={conversationMode ? false : !studySet || !!busy}
               title={conversationMode ? 'Stop study buddy' : recording ? 'Stop recording' : 'Record question'}
             >
               {conversationMode ? <Square size={20} /> : recording ? <Pause size={20} /> : <Mic size={20} />}

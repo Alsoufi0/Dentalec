@@ -433,3 +433,58 @@
 :root[data-theme="dark"] .clinic-go:hover { border-color: var(--c-accent, #36d6c3); }
 :root[data-theme="dark"] .clinic-go:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 560px) { :root[data-theme="dark"] .clinic-grid { grid-template-columns: 1fr; } }
+
+/* Source library: multiple sources with an active picker */
+:root[data-theme="dark"] .source-count-tag { margin-left: auto; color: var(--c-muted, #8794ab); font-size: 0.78rem; font-weight: 600; }
+:root[data-theme="dark"] .source-list { display: flex; flex-direction: column; gap: 10px; }
+:root[data-theme="dark"] .source-card {
+  border: 1px solid var(--c-line, #232c3d); border-radius: 14px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--c-panel, #111722);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+:root[data-theme="dark"] .source-card:hover { border-color: rgba(54,214,195,0.35); }
+:root[data-theme="dark"] .source-card.active { border-color: rgba(54,214,195,0.55); box-shadow: 0 12px 30px -22px rgba(0,0,0,0.9); }
+:root[data-theme="dark"] .source-card-row { display: flex; align-items: stretch; gap: 8px; padding: 6px 10px 6px 6px; }
+:root[data-theme="dark"] .source-main {
+  flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px 8px;
+  background: none; border: 0; cursor: pointer; text-align: left; border-radius: 10px; min-width: 0;
+}
+:root[data-theme="dark"] .source-main:hover { background: rgba(255,255,255,0.03); }
+:root[data-theme="dark"] .source-radio {
+  flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--c-line-2, #2e3950); transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+:root[data-theme="dark"] .source-card.active .source-radio { border-color: var(--c-accent, #36d6c3); box-shadow: inset 0 0 0 3.5px var(--c-panel, #111722), inset 0 0 0 10px var(--c-accent, #36d6c3); }
+:root[data-theme="dark"] .source-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+:root[data-theme="dark"] .source-info strong { color: var(--c-text, #e8eef9); font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-theme="dark"] .source-info small { color: var(--c-muted, #8794ab); font-size: 0.76rem; }
+:root[data-theme="dark"] .source-active-tag {
+  flex: 0 0 auto; font-style: normal; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+  color: #6fe7da; background: rgba(54,214,195,0.14); border-radius: 999px; padding: 4px 10px;
+}
+:root[data-theme="dark"] .source-card .file-del { align-self: center; }
+:root[data-theme="dark"] .source-files { border-top: 1px solid var(--c-line, #232c3d); padding: 8px 12px 10px; }
+
+/* Sidebar active-source strip becomes a shortcut to the Library */
+:root[data-theme="dark"] .source-strip-btn { width: 100%; border: 1px solid var(--c-line, #232c3d); cursor: pointer; text-align: left; }
+:root[data-theme="dark"] .source-strip-btn:hover { border-color: rgba(54,214,195,0.45); }
+:root[data-theme="dark"] .source-strip-btn strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-theme="dark"] .source-strip-btn small { display: block; color: var(--c-muted, #8794ab); font-size: 0.72rem; margin-top: 2px; }
+
+/* Collapsed answer sections: show a real preview plus expand-all control */
+:root[data-theme="dark"] .sec-preview {
+  display: block; font-style: normal; color: var(--c-muted, #8794ab); font-size: 0.8rem; line-height: 1.5;
+  padding: 0 14px 11px 40px; margin-top: -4px;
+}
+:root[data-theme="dark"] .answer-expand-row { display: flex; justify-content: flex-end; margin: 2px 0 6px; }
+:root[data-theme="dark"] .answer-expand-all {
+  background: none; border: 1px solid var(--c-line-2, #2e3950); color: var(--c-muted, #8794ab);
+  border-radius: 999px; padding: 4px 12px; font-size: 0.76rem; font-weight: 600; cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+:root[data-theme="dark"] .answer-expand-all:hover { color: var(--c-accent, #36d6c3); border-color: rgba(54,214,195,0.45); }
+
+@media (max-width: 560px) {
+  :root[data-theme="dark"] .source-info strong { white-space: normal; }
+  :root[data-theme="dark"] .sec-preview { padding-left: 14px; }
+}

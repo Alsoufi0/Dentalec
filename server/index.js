@@ -227,6 +227,214 @@ function requireAiBudget(req, res, next) {
   next();
 }
 
+// ---------------------------------------------------------------------------
+// Study sources: multi-source model, lazy migration, and raw-text storage.
+// A student can keep several sources (pasted text or PDF sets); each source has
+// its own vector store, its own chat/flashcards/notes, and, when we could
+// extract it, its raw text on disk for full-coverage generation.
+// ---------------------------------------------------------------------------
+const MAX_SOURCES = 10;
+const MAX_FULLTEXT_CHARS = 300000;
+const sourcesDir = path.join(dataDir, 'sources');
+
+function safePathPart(value) {
+  return String(value || '').replace(/[^A-Za-z0-9_.-]/g, '_');
+}
+
+function emptySourceData() {
+  return { chat: [], flashcards: [], notes: '' };
+}
+
+function emptyStudyState() {
+  return {
+    sources: [],
+    activeSourceId: null,
+    sourceData: {},
+    page: 'dashboard',
+    voicePersona: 'peer',
+    learning: { mastery: {}, reviews: {}, curriculum: [] },
+    updatedAt: new Date().toISOString()
+  };
+}
+
+// Lazily migrate a legacy single-studySet state to the multi-source shape.
+// Never touches OpenAI resources, so it is safe to run on every request.
+function normalizeStudyState(user) {
+  const state = user.studyState;
+  if (!state) return null;
+  if (Array.isArray(state.sources)) {
+    if (!state.sourceData || typeof state.sourceData !== 'object') state.sourceData = {};
+    return state;
+  }
+
+  const next = emptyStudyState();
+  next.page = state.page || next.page;
+  next.voicePersona = state.voicePersona || next.voicePersona;
+  next.learning = typeof state.learning === 'object' && state.learning ? state.learning : next.learning;
+  next.updatedAt = state.updatedAt || next.updatedAt;
+
+  const legacyData = {
+    chat: Array.isArray(state.chat) ? state.chat : [],
+    flashcards: Array.isArray(state.flashcards) ? state.flashcards : [],
+    notes: String(state.notes || '')
+  };
+
+  if (state.studySet?.vectorStoreId) {
+    const files = (state.studySet.files || []).map((file) => ({ ...file, textExtracted: false }));
+    const source = {
+      id: crypto.randomUUID(),
+      title: files[0]?.originalName || 'My study set',
+      sourceType: files.length && files.every((file) => file.sourceType === 'text') ? 'text' : 'pdf',
+      vectorStoreId: state.studySet.vectorStoreId,
+      files,
+      textChars: 0,
+      createdAt: state.updatedAt || new Date().toISOString()
+    };
+    next.sources = [source];
+    next.activeSourceId = source.id;
+    next.sourceData[source.id] = legacyData;
+  } else if (legacyData.chat.length || legacyData.flashcards.length || legacyData.notes) {
+    next.sourceData.unassigned = legacyData;
+  }
+
+  user.studyState = next;
+  saveStore();
+  return next;
+}
+
+function findSource(user, sourceId) {
+  if (!sourceId) return null;
+  return (user.studyState?.sources || []).find((source) => source.id === sourceId) || null;
+}
+
+function activeSource(user) {
+  const state = user.studyState;
+  if (!state?.activeSourceId) return null;
+  return findSource(user, state.activeSourceId);
+}
+
+// Old clients still read a single { vectorStoreId, files } study set; project
+// the active source into that shape so open tabs keep working during rollout.
+function legacyStudySetProjection(user) {
+  const source = activeSource(user);
+  if (!source) return null;
+  return { vectorStoreId: source.vectorStoreId, files: source.files };
+}
+
+function sourceListResponse(user) {
+  const state = user.studyState;
+  return {
+    sources: state?.sources || [],
+    activeSourceId: state?.activeSourceId || null,
+    studySet: legacyStudySetProjection(user)
+  };
+}
+
+// The server, not the request body, decides which source an AI call may use.
+// A stale or foreign vectorStoreId can never reach OpenAI directly.
+function resolveRequestSource(req) {
+  normalizeStudyState(req.user);
+  const { sourceId, vectorStoreId } = req.body || {};
+  const sources = req.user.studyState?.sources || [];
+  if (sourceId) return sources.find((source) => source.id === sourceId) || null;
+  if (vectorStoreId) {
+    const match = sources.find((source) => source.vectorStoreId === vectorStoreId);
+    if (match) return match;
+  }
+  return activeSource(req.user);
+}
+
+function sourceTextDir(userId, sourceId) {
+  return path.join(sourcesDir, safePathPart(userId), safePathPart(sourceId));
+}
+
+function sourceTextPath(userId, sourceId, fileId) {
+  return path.join(sourceTextDir(userId, sourceId), `${safePathPart(fileId)}.txt`);
+}
+
+function writeSourceText(userId, sourceId, fileId, text) {
+  try {
+    fs.mkdirSync(sourceTextDir(userId, sourceId), { recursive: true });
+    fs.writeFileSync(sourceTextPath(userId, sourceId, fileId), text, 'utf8');
+    return true;
+  } catch (error) {
+    console.error('Raw source text write failed:', error.message);
+    return false;
+  }
+}
+
+// Combined raw text of a source, or null when unavailable or too large for
+// direct model input; callers then fall back to file_search retrieval.
+function readCombinedSourceText(userId, source, maxChars = MAX_FULLTEXT_CHARS) {
+  if (!source) return null;
+  const parts = [];
+  let total = 0;
+  for (const file of source.files || []) {
+    if (!file.textExtracted) continue;
+    try {
+      const text = fs.readFileSync(sourceTextPath(userId, source.id, file.fileId), 'utf8');
+      if (!text.trim()) continue;
+      total += text.length;
+      if (total > maxChars) return null;
+      parts.push(`--- ${file.originalName} ---\n${text}`);
+    } catch {
+      // Missing raw text: this file degrades to retrieval.
+    }
+  }
+  return parts.length ? parts.join('\n\n') : null;
+}
+
+function deleteSourceTextFile(userId, sourceId, fileId) {
+  fs.rm(sourceTextPath(userId, sourceId, fileId), { force: true }, () => {});
+}
+
+function deleteSourceTextDir(userId, sourceId) {
+  fs.rm(sourceTextDir(userId, sourceId), { recursive: true, force: true }, () => {});
+}
+
+// Best-effort teardown of a source's OpenAI files, vector store, and raw text.
+async function deleteRemoteSource(userId, source) {
+  for (const file of source.files || []) {
+    try { await openaiClient.vectorStores.files.del(source.vectorStoreId, file.fileId); } catch { /* already gone */ }
+    try { await openaiClient.files.del(file.fileId); } catch { /* already gone */ }
+  }
+  try { await openaiClient.vectorStores.del(source.vectorStoreId); } catch { /* already gone */ }
+  deleteSourceTextDir(userId, source.id);
+}
+
+function removeSourceFromState(state, sourceId) {
+  state.sources = (state.sources || []).filter((source) => source.id !== sourceId);
+  if (state.sourceData) delete state.sourceData[sourceId];
+  if (state.activeSourceId === sourceId) {
+    const newest = [...state.sources].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    state.activeSourceId = newest?.id || null;
+  }
+}
+
+// Extract selectable text from a PDF so document-wide tools can read the whole
+// file. Returns '' for scanned/image PDFs; the upload itself never fails here.
+let pdfjsModulePromise;
+async function extractPdfText(filePath) {
+  try {
+    pdfjsModulePromise ??= import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjs = await pdfjsModulePromise;
+    const data = new Uint8Array(fs.readFileSync(filePath));
+    const loadingTask = pdfjs.getDocument({ data, useSystemFonts: true, isEvalSupported: false });
+    const doc = await loadingTask.promise;
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+      const page = await doc.getPage(pageNumber);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item) => item.str).join(' '));
+    }
+    await loadingTask.destroy();
+    return pages.join('\n\n').replace(/[ \t]+/g, ' ').trim();
+  } catch (error) {
+    console.error('PDF text extraction failed:', error.message);
+    return '';
+  }
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.pbkdf2Sync(password, salt, 310000, 32, 'sha256').toString('hex');
   return `${salt}:${hash}`;
@@ -331,23 +539,62 @@ const defaultModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 // that finishes any answer that still reaches its cap.
 const outputLimits = {
   answer: 1100,
-  summary: 1500,
+  summary: 2800,
   explanation: 1200,
   test: 1800,
-  flashcards: 1400,
-  notes: 1500,
+  flashcards: 2600,
+  notes: 2800,
   weakQuiz: 1500,
   caseStudy: 1700,
   mnemonics: 1000,
-  conceptMap: 1100,
+  conceptMap: 1600,
   clinicalChecklist: 1100,
-  examTraps: 1000,
+  examTraps: 1400,
   teachBack: 1100,
   osce: 1800,
   adaptivePlan: 1300,
-  curriculumMap: 1500,
+  curriculumMap: 2200,
   clinicalVisionChecklist: 1100,
   ...Object.fromEntries(Object.values(dentalosEngines).map((engine) => [engine.mode, engine.outputLimit]))
+};
+
+// Modes that must cover the WHOLE document. When the raw source text is
+// available these get it injected directly instead of 25 retrieved chunks,
+// and they get a completeness instruction instead of the concise one.
+const fullTextModes = new Set([
+  'summary',
+  'notes',
+  'flashcards',
+  'curriculumMap',
+  'conceptMap',
+  'examTraps',
+  'mnemonics',
+  'teachBack',
+  'clinicalChecklist',
+  ...Object.keys(dentalosEngines)
+]);
+
+const flashcardsSchema = {
+  name: 'flashcards',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['cards'],
+    properties: {
+      cards: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['question', 'answer'],
+          properties: {
+            question: { type: 'string' },
+            answer: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
 };
 
 function trimForModel(value, limit = 1800) {
@@ -355,7 +602,14 @@ function trimForModel(value, limit = 1800) {
   return text.length > limit ? `${text.slice(0, limit).trim()}...` : text;
 }
 
-const tutorInstructions = `You are a dental school study tutor. Search the uploaded PDFs before answering. Base your answer on the uploaded course material whenever relevant snippets are found. For broad or informal questions, infer the likely dental topic, search for nearby terms, and explain the matching source material in clear student language. Format answers with short section headings and clean numbered or bulleted lines. Use Markdown tables for rubrics, comparison grids, diagnostic criteria, protocols, decision pathways, marking schemes, and feature lists. Preserve important details; simplify by structuring information visually, never by deleting criteria, classifications, differentials, complications, prognosis, or protocol steps. Do not use decorative symbols, emoji, or casual filler. If the uploaded source truly has no relevant content, say what is missing and offer a short general dental-study explanation clearly labeled as general background. Be precise with anatomy, pathology, materials, procedures, and terminology. Never present yourself as a licensed clinician. Be concise and scannable: lead with the answer, use short bullets and compact tables, keep each section tight, and avoid repetition, filler, and restating the question. Prefer the shortest response that still covers the essentials.`;
+const tutorInstructions = `You are a dental school study tutor. Base your answer on the student's course material whenever relevant content is available. For broad or informal questions, infer the likely dental topic, look for nearby terms, and explain the matching source material in clear student language. Format answers with short section headings and clean numbered or bulleted lines. Use Markdown tables for rubrics, comparison grids, diagnostic criteria, protocols, decision pathways, marking schemes, and feature lists. Preserve important details; simplify by structuring information visually, never by deleting criteria, classifications, differentials, complications, prognosis, or protocol steps. Do not use decorative symbols, emoji, or casual filler. If the source truly has no relevant content, say what is missing and offer a short general dental-study explanation clearly labeled as general background. Be precise with anatomy, pathology, materials, procedures, and terminology. Use professional academic wording, for example children rather than kids. Do not end with motivational filler or praise lines such as good luck or keep up the great work. Never present yourself as a licensed clinician.`;
+
+// Style instruction is mode-dependent: chat answers stay tight and scannable,
+// while document-wide tools must cover everything in the source.
+const conciseClause =
+  'Be concise and scannable: lead with the answer, use short bullets and compact tables, keep each section tight, and avoid repetition, filler, and restating the question. Prefer the shortest response that still covers the essentials.';
+const completenessClause =
+  'Cover the entire provided source. Do not leave out sections, classifications, criteria, differentials, or protocol steps. Completeness matters more than brevity; structure the information so it stays scannable.';
 
 const modePrompts = {
   summary:
@@ -424,11 +678,19 @@ async function handleUpload(req, res) {
   }
 
   try {
+    const state = normalizeStudyState(req.user) || (req.user.studyState = emptyStudyState());
+    if ((state.sources || []).length >= MAX_SOURCES) {
+      res.status(400).json({ error: `You have reached the limit of ${MAX_SOURCES} sources. Delete one you no longer need, then add this one.` });
+      return;
+    }
+
+    const sourceId = crypto.randomUUID();
     const vectorStore = await openaiClient.vectorStores.create({
       name: `Simav Dental Tutor study set ${new Date().toISOString()}`
     });
 
     const uploadedFiles = [];
+    let textChars = 0;
     for (const file of req.files) {
       const openaiFile = await openaiClient.files.create({
         file: await toFile(fs.createReadStream(file.path), file.originalname, {
@@ -441,36 +703,34 @@ async function handleUpload(req, res) {
         file_id: openaiFile.id
       });
 
+      const extracted = await extractPdfText(file.path);
+      const textExtracted = extracted.length >= 200 && writeSourceText(req.user.id, sourceId, openaiFile.id, extracted);
+      if (textExtracted) textChars += extracted.length;
+
       uploadedFiles.push({
         originalName: file.originalname,
-        fileId: openaiFile.id
+        fileId: openaiFile.id,
+        textExtracted
       });
     }
 
-    const studySet = {
+    const source = {
+      id: sourceId,
+      title: uploadedFiles[0]?.originalName || 'PDF study set',
+      sourceType: 'pdf',
       vectorStoreId: vectorStore.id,
-      files: uploadedFiles
+      files: uploadedFiles,
+      textChars,
+      createdAt: new Date().toISOString()
     };
-    req.user.studyState = {
-      studySet,
-      chat: [
-        {
-          role: 'assistant',
-          text: 'Your PDF set is indexed. You can ask a question, request a summary, or switch to Test mode for an oral exam.',
-          mode: 'answer',
-          id: crypto.randomUUID()
-        }
-      ],
-      flashcards: [],
-      notes: '',
-      page: 'dashboard',
-      voicePersona: 'peer',
-      updatedAt: new Date().toISOString()
-    };
+    state.sources.push(source);
+    state.activeSourceId = source.id;
+    state.sourceData[source.id] = emptySourceData();
+    state.updatedAt = new Date().toISOString();
     incrementUsage(req.user, 'uploads', req.files.length);
     saveStore();
 
-    res.json(studySet);
+    res.json({ ...sourceListResponse(req.user), sourceId: source.id, vectorStoreId: vectorStore.id, files: uploadedFiles });
   } catch (error) {
     res.status(500).json({ error: error.message });
   } finally {
@@ -493,6 +753,13 @@ async function indexTextSource(req, res) {
   }
 
   try {
+    const state = normalizeStudyState(req.user) || (req.user.studyState = emptyStudyState());
+    if ((state.sources || []).length >= MAX_SOURCES) {
+      res.status(400).json({ error: `You have reached the limit of ${MAX_SOURCES} sources. Delete one you no longer need, then add this one.` });
+      return;
+    }
+
+    const sourceId = crypto.randomUUID();
     const vectorStore = await openaiClient.vectorStores.create({
       name: `Simav Dental Tutor text source ${new Date().toISOString()}`
     });
@@ -507,30 +774,23 @@ async function indexTextSource(req, res) {
       file_id: openaiFile.id
     });
 
-    const studySet = {
+    const textExtracted = writeSourceText(req.user.id, sourceId, openaiFile.id, text);
+    const source = {
+      id: sourceId,
+      title,
+      sourceType: 'text',
       vectorStoreId: vectorStore.id,
-      files: [{ originalName: title, fileId: openaiFile.id, sourceType: 'text' }]
+      files: [{ originalName: title, fileId: openaiFile.id, sourceType: 'text', textExtracted }],
+      textChars: textExtracted ? text.length : 0,
+      createdAt: new Date().toISOString()
     };
-    req.user.studyState = {
-      studySet,
-      chat: [
-        {
-          role: 'assistant',
-          text: 'Your pasted dental material is indexed. You can ask questions, generate a summary, build flashcards, or start an OSCE-style drill.',
-          mode: 'answer',
-          id: crypto.randomUUID()
-        }
-      ],
-      flashcards: [],
-      notes: '',
-      page: 'dashboard',
-      voicePersona: 'peer',
-      learning: { mastery: {}, reviews: {}, curriculum: [] },
-      updatedAt: new Date().toISOString()
-    };
+    state.sources.push(source);
+    state.activeSourceId = source.id;
+    state.sourceData[source.id] = emptySourceData();
+    state.updatedAt = new Date().toISOString();
     incrementUsage(req.user, 'uploads');
     saveStore();
-    res.json(studySet);
+    res.json({ ...sourceListResponse(req.user), sourceId: source.id, vectorStoreId: vectorStore.id, files: source.files });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -538,7 +798,7 @@ async function indexTextSource(req, res) {
 
 const artifactPrompts = {
   flashcards:
-    'Create 10 concise dental flashcards from the provided material. Return only valid JSON with this shape: {"cards":[{"question":"...","answer":"..."}]}. Use short question fronts and exam-focused answer backs. Focus on mechanisms, definitions, classifications, clinical consequences, and anatomy.',
+    'Create 12 to 20 dental flashcards that together cover the whole provided material, not just its start. Return only valid JSON with this shape: {"cards":[{"question":"...","answer":"..."}]}. Use short, specific question fronts. Answer backs must be exam-complete: include the full list, classification, criteria, ages, or steps the source gives, not a one-line gist. Cover mechanisms, definitions, classifications, risk factors, clinical consequences, and anatomy.',
   notes:
     'Create premium dental study notes from the material. Use these sections: Core Idea, Visual Structure Map, High-Yield Facts, Clinical Relevance, Key Terms, Common Confusions, Exam Traps, Chairside Checklist, Active-Recall Questions, 60-Second Recap. In the Visual Structure Map section, express the relationships as arrow chains, one per line, using this exact notation: Concept -> Subconcept -> Detail (for example: Pulp -> Inflammation -> Pulpitis -> Necrosis). Keep wording clean, scannable, and exam-focused.',
   weakQuiz:
@@ -651,16 +911,19 @@ function joinContinuation(soFar, next) {
   return `${soFar} ${next}`;
 }
 
-async function createResponse({ vectorStoreId, input, mode, history, persona = 'peer' }) {
-  const hasSearchableSource = isOpenAIVectorStoreId(vectorStoreId);
+async function createResponse({ source, input, mode, history, persona = 'peer', rawText = null, jsonSchema = null }) {
+  const vectorStoreId = source?.vectorStoreId;
+  const hasSearchableSource = !rawText && isOpenAIVectorStoreId(vectorStoreId);
   const maxOutputTokens = outputLimits[mode] ?? engineOutputLimitFor(mode) ?? 1800;
+  const styleClause = fullTextModes.has(mode) ? completenessClause : conciseClause;
+  const sourceStatus = rawText
+    ? 'The complete source text is included in the message. Base the answer on it and cover it fully.'
+    : hasSearchableSource
+      ? 'A searchable uploaded source is available. Use file search before answering.'
+      : 'No valid searchable source is attached for this local/test session. Use only the conversation and prompt context; if source context is missing, say so briefly instead of inventing citations.';
   const baseOptions = {
     model: defaultModel,
-    instructions: `${tutorInstructions}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nSource status: ${
-      hasSearchableSource
-        ? 'A searchable uploaded source is available. Use file search before answering.'
-        : 'No valid searchable source is attached for this local/test session. Use only the conversation and prompt context; if source context is missing, say so briefly instead of inventing citations.'
-    }\n\nMode: ${mode}. ${modePrompts[mode] ?? modePrompts.answer}`,
+    instructions: `${tutorInstructions}\n\n${styleClause}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nSource status: ${sourceStatus}\n\nMode: ${mode}. ${modePrompts[mode] ?? modePrompts.answer}`,
     max_output_tokens: maxOutputTokens
   };
 
@@ -671,16 +934,46 @@ async function createResponse({ vectorStoreId, input, mode, history, persona = '
       {
         type: 'file_search',
         vector_store_ids: [vectorStoreId],
-        max_num_results: 10
+        max_num_results: 25
       }
     ];
   }
 
+  if (jsonSchema) {
+    baseOptions.text = {
+      format: { type: 'json_schema', name: jsonSchema.name, strict: true, schema: jsonSchema.schema }
+    };
+  }
+
+  // The raw source block sits outside trimForModel on purpose: it must reach
+  // the model whole, never whitespace-collapsed or sliced.
+  const conversation = buildConversationInput(input, history);
+  const composedInput = rawText
+    ? `Full study source text (use all of it, it is the complete material):\n<<<SOURCE\n${rawText}\nSOURCE>>>\n\n${conversation}`
+    : conversation;
+
   let response = await openaiClient.responses.create({
     ...baseOptions,
-    input: buildConversationInput(input, history)
+    input: composedInput
   });
   let combined = response.output_text || '';
+
+  // Structured JSON cannot be stitched across continuations; if the first try
+  // was cut off at the cap, regenerate once with a smaller ask instead.
+  if (jsonSchema) {
+    if (response.status === 'incomplete') {
+      try {
+        response = await openaiClient.responses.create({
+          ...baseOptions,
+          input: `${composedInput}\n\nReturn at most 8 cards with shorter answers.`
+        });
+        if (response.output_text) combined = response.output_text;
+      } catch (retryError) {
+        console.error('Structured retry failed:', retryError.message);
+      }
+    }
+    return combined;
+  }
 
   // Safety net: if the answer was cut off at the token cap, transparently ask
   // the model to keep going from where it stopped so the student still gets
@@ -790,74 +1083,138 @@ app.post(apiPaths('/api/auth/logout'), requireAuth, (req, res) => {
 });
 
 app.get(apiPaths('/api/session'), requireAuth, (req, res) => {
-  res.json({ studyState: req.user.studyState || null });
+  const state = normalizeStudyState(req.user);
+  if (!state) {
+    res.json({ studyState: null });
+    return;
+  }
+  res.json({ studyState: { ...state, studySet: legacyStudySetProjection(req.user) } });
 });
 
+// Sources and the active source are server-owned; the client can only write
+// its per-source study data, page, persona, and learning progress. A stale tab
+// can never resurrect a deleted or replaced source.
 app.put(apiPaths('/api/session'), requireAuth, (req, res) => {
-  const { studySet = null, chat = [], flashcards = [], notes = '', page = 'dashboard', voicePersona = 'peer', learning = {} } = req.body || {};
-  req.user.studyState = {
-    studySet,
-    chat: Array.isArray(chat) ? chat.slice(-120) : [],
-    flashcards: Array.isArray(flashcards) ? flashcards.slice(0, 300) : [],
-    notes: String(notes || '').slice(0, 120000),
-    page,
-    voicePersona,
-    learning: typeof learning === 'object' && learning ? learning : {},
-    updatedAt: new Date().toISOString()
-  };
+  const { sourceData, page, voicePersona, learning } = req.body || {};
+  const state = normalizeStudyState(req.user) || (req.user.studyState = emptyStudyState());
+
+  if (sourceData && typeof sourceData === 'object' && !Array.isArray(sourceData)) {
+    const validIds = new Set([...(state.sources || []).map((source) => source.id), 'unassigned']);
+    const nextData = {};
+    for (const [key, value] of Object.entries(sourceData)) {
+      if (!validIds.has(key) || !value || typeof value !== 'object') continue;
+      nextData[key] = {
+        chat: Array.isArray(value.chat) ? value.chat.slice(-200) : [],
+        flashcards: Array.isArray(value.flashcards) ? value.flashcards.slice(0, 300) : [],
+        notes: String(value.notes || '').slice(0, 120000)
+      };
+    }
+    state.sourceData = nextData;
+  }
+
+  if (typeof page === 'string') state.page = page;
+  if (typeof voicePersona === 'string') state.voicePersona = voicePersona;
+  if (learning && typeof learning === 'object' && !Array.isArray(learning)) state.learning = learning;
+  state.updatedAt = new Date().toISOString();
   saveStore();
   res.json({ ok: true });
 });
 
-app.delete(apiPaths('/api/session'), requireAuth, (req, res) => {
+app.delete(apiPaths('/api/session'), requireAuth, async (req, res) => {
+  const state = normalizeStudyState(req.user);
+  if (state && process.env.OPENAI_API_KEY) {
+    openaiClient ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    for (const source of state.sources || []) {
+      try { await deleteRemoteSource(req.user.id, source); } catch { /* best effort */ }
+    }
+  }
   req.user.studyState = null;
   saveStore();
   res.json({ ok: true });
+});
+
+app.post(apiPaths('/api/source/activate'), requireAuth, (req, res) => {
+  const state = normalizeStudyState(req.user);
+  const source = state ? findSource(req.user, String(req.body?.sourceId || '')) : null;
+  if (!source) {
+    res.status(404).json({ error: 'Source not found.' });
+    return;
+  }
+  state.activeSourceId = source.id;
+  state.updatedAt = new Date().toISOString();
+  saveStore();
+  res.json(sourceListResponse(req.user));
 });
 
 app.post(apiPaths('/api/upload'), requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 24, label: 'upload' }), requireAiBudget, requireApiKey, multipart(pdfUpload.array('pdfs', 8)), handleUpload);
 
 app.post(apiPaths('/api/text-source'), requireAuth, rateLimit({ windowMs: 60 * 60 * 1000, max: 30, label: 'text-source' }), requireAiBudget, requireApiKey, indexTextSource);
 
-// Remove a single uploaded source (one PDF or pasted text) from the study set.
-// Deletes it from the OpenAI vector store + file store, keeps the server session
-// in sync, and tears down the empty vector store if it was the last source.
+// Remove a whole source ({ sourceId }) or a single file within one (legacy
+// { vectorStoreId, fileId }). Only sources owned by the signed-in user can be
+// touched. Deletes the OpenAI files/vector store and the raw text on disk.
 app.post(apiPaths('/api/source/delete'), requireAuth, requireApiKey, async (req, res) => {
-  const { vectorStoreId, fileId } = req.body || {};
-  if (!vectorStoreId || !fileId) {
-    res.status(400).json({ error: 'vectorStoreId and fileId are required.' });
+  const { sourceId, vectorStoreId, fileId } = req.body || {};
+  const state = normalizeStudyState(req.user);
+  if (!state) {
+    res.status(400).json({ error: 'Nothing to delete.' });
     return;
   }
   try {
-    try { await openaiClient.vectorStores.files.del(vectorStoreId, fileId); } catch { /* already gone */ }
-    try { await openaiClient.files.del(fileId); } catch { /* already gone */ }
-
-    const state = req.user.studyState;
-    let studySet = state?.studySet || null;
-    if (studySet && studySet.vectorStoreId === vectorStoreId) {
-      studySet = { ...studySet, files: (studySet.files || []).filter((f) => f.fileId !== fileId) };
-      if (!studySet.files.length) {
-        try { await openaiClient.vectorStores.del(vectorStoreId); } catch { /* ignore */ }
-        studySet = null;
+    if (sourceId) {
+      const source = findSource(req.user, String(sourceId));
+      if (!source) {
+        res.status(404).json({ error: 'Source not found.' });
+        return;
       }
-      req.user.studyState = { ...(state || {}), studySet, updatedAt: new Date().toISOString() };
-      saveStore();
+      await deleteRemoteSource(req.user.id, source);
+      removeSourceFromState(state, source.id);
+    } else if (vectorStoreId && fileId) {
+      const source = (state.sources || []).find((item) => item.vectorStoreId === vectorStoreId);
+      if (!source) {
+        res.status(404).json({ error: 'Source not found.' });
+        return;
+      }
+      try { await openaiClient.vectorStores.files.del(source.vectorStoreId, fileId); } catch { /* already gone */ }
+      try { await openaiClient.files.del(fileId); } catch { /* already gone */ }
+      deleteSourceTextFile(req.user.id, source.id, fileId);
+      source.files = (source.files || []).filter((file) => file.fileId !== fileId);
+      source.textChars = (source.files || []).reduce((sum, file) => {
+        if (!file.textExtracted) return sum;
+        try { return sum + fs.statSync(sourceTextPath(req.user.id, source.id, file.fileId)).size; } catch { return sum; }
+      }, 0);
+      if (!source.files.length) {
+        try { await openaiClient.vectorStores.del(source.vectorStoreId); } catch { /* already gone */ }
+        deleteSourceTextDir(req.user.id, source.id);
+        removeSourceFromState(state, source.id);
+      }
+    } else {
+      res.status(400).json({ error: 'sourceId, or vectorStoreId and fileId, are required.' });
+      return;
     }
-    res.json({ studySet });
+    state.updatedAt = new Date().toISOString();
+    saveStore();
+    res.json(sourceListResponse(req.user));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post(apiPaths('/api/study'), requireAuth, rateLimit({ windowMs: 60 * 1000, max: 18, label: 'study' }), requireAiBudget, requireApiKey, async (req, res) => {
-  const { vectorStoreId, message, mode = 'answer', history = [], persona = 'peer' } = req.body;
-  if (!vectorStoreId || !message) {
-    res.status(400).json({ error: 'vectorStoreId and message are required.' });
+  const { message, mode = 'answer', history = [], persona = 'peer' } = req.body;
+  if (!message) {
+    res.status(400).json({ error: 'message is required.' });
+    return;
+  }
+  const studySource = resolveRequestSource(req);
+  if (!studySource) {
+    res.status(400).json({ error: 'Add a study source first.' });
     return;
   }
 
   try {
-    const text = await createResponse({ vectorStoreId, input: message, mode, history, persona });
+    const rawText = mode === 'summary' ? readCombinedSourceText(req.user.id, studySource) : null;
+    const text = await createResponse({ source: studySource, input: message, mode, history, persona, rawText });
     incrementUsage(req.user, 'aiCalls');
     res.json({ text });
   } catch (error) {
@@ -866,24 +1223,50 @@ app.post(apiPaths('/api/study'), requireAuth, rateLimit({ windowMs: 60 * 1000, m
 });
 
 app.post(apiPaths('/api/artifact'), requireAuth, rateLimit({ windowMs: 60 * 1000, max: 12, label: 'artifact' }), requireAiBudget, requireApiKey, async (req, res) => {
-  const { vectorStoreId, type = 'notes', source = '', history = [], persona = 'peer' } = req.body;
-  if (!vectorStoreId) {
-    res.status(400).json({ error: 'vectorStoreId is required.' });
+  const { type = 'notes', source: selection = '', history = [], persona = 'peer' } = req.body;
+  const studySource = resolveRequestSource(req);
+  if (!studySource) {
+    res.status(400).json({ error: 'Add a study source first.' });
     return;
   }
 
   try {
     const prompt = artifactPrompts[type] ?? enginePromptFor(type) ?? artifactPrompts.notes;
+    const rawText = fullTextModes.has(type) ? readCombinedSourceText(req.user.id, studySource) : null;
+    const jsonSchema = type === 'flashcards' ? flashcardsSchema : null;
+
+    // When the student asks for more flashcards, tell the model which cards
+    // already exist so it makes new ones instead of repeating the old set.
+    let avoidRepeats = '';
+    if (type === 'flashcards') {
+      const bodyExisting = Array.isArray(req.body.existingQuestions) ? req.body.existingQuestions : [];
+      const savedExisting = (req.user.studyState?.sourceData?.[studySource.id]?.flashcards || []).map((card) => card?.question);
+      const existing = [...new Set([...bodyExisting, ...savedExisting].map((question) => String(question || '').trim()).filter(Boolean))].slice(0, 120);
+      if (existing.length) {
+        avoidRepeats = `\n\nThe student already has flashcards for these questions. Do not repeat or lightly rephrase them. Create new cards from parts of the material not yet covered:\n- ${existing.join('\n- ')}`;
+      }
+    }
+
     const text = await createResponse({
-      vectorStoreId,
+      source: studySource,
       mode: type,
       history,
       persona,
-      input: `${prompt}\n\nStudent-selected material or request:\n${source || 'Use the uploaded PDF study set.'}`
+      rawText,
+      jsonSchema,
+      input: `${prompt}\n\nStudent-selected material or request:\n${selection || 'Use the uploaded study source.'}${avoidRepeats}`
     });
     incrementUsage(req.user, 'aiCalls');
     if (type === 'flashcards') {
-      const cards = parseCardsFromText(text);
+      let cards = [];
+      try {
+        const parsed = JSON.parse(text);
+        cards = (Array.isArray(parsed.cards) ? parsed.cards : [])
+          .filter((card) => card?.question && card?.answer)
+          .map((card) => ({ question: String(card.question).trim(), answer: String(card.answer).trim() }));
+      } catch {
+        cards = parseCardsFromText(text);
+      }
       res.json({
         text: cards.length ? `Created ${cards.length} flashcards.` : text,
         cards
