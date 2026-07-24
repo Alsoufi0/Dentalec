@@ -689,3 +689,65 @@
 :root[data-theme="dark"] .mmd-edge { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--c-text, #e8eef9); }
 :root[data-theme="dark"] .mmd-edge span { padding: 4px 10px; border: 1px solid var(--c-line-2, #2e3950); border-radius: 8px; background: var(--c-bg, #0a0e14); }
 :root[data-theme="dark"] .mmd-edge svg { color: var(--c-accent, #36d6c3); flex: 0 0 auto; }
+
+/* ===================== Mobile view: compact, content-first ================= */
+@media (max-width: 920px) {
+  /* Top bar: small brand + all six nav items, secondary panels hidden so the
+     content (chat, diagrams, cards) gets the screen instead of chrome. */
+  :root[data-theme="dark"] .study-panel { padding: 10px 12px 12px; gap: 8px; }
+  .brand-row { gap: 10px; align-items: center; }
+  .brand-mark { width: 34px; height: 34px; }
+  .brand-row p, :root[data-theme="dark"] .brand-row p { display: none; }
+
+  .account-strip,
+  .usage-strip,
+  .source-strip,
+  .source-strip-btn,
+  .voice-card,
+  .persona-control,
+  .system-card,
+  :root[data-theme="dark"] .account-strip,
+  :root[data-theme="dark"] .usage-strip,
+  :root[data-theme="dark"] .source-strip,
+  :root[data-theme="dark"] .source-strip-btn,
+  :root[data-theme="dark"] .voice-card,
+  :root[data-theme="dark"] .persona-control,
+  :root[data-theme="dark"] .study-snapshot { display: none; }
+
+  /* All 6 nav items visible: 3 per row, icon over a short label, no scroll.
+     nav.mode-group + !important beats the older flex/overflow strip rule. */
+  nav.mode-group { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; overflow: visible !important; padding-bottom: 0 !important; }
+  nav.mode-group button {
+    flex: 1 1 auto !important; min-height: 0; padding: 9px 4px; flex-direction: column; gap: 3px;
+    justify-content: center; align-items: center; text-align: center;
+  }
+  nav.mode-group button span { align-items: center; text-align: center; }
+  nav.mode-group button strong { font-size: 0.76rem; }
+  nav.mode-group small, :root[data-theme="dark"] nav.mode-group small { display: none; }
+  :root[data-theme="dark"] nav.mode-group button.active { box-shadow: inset 0 -2px 0 var(--c-accent, #36d6c3); }
+  .nav-divider, :root[data-theme="dark"] .nav-divider { display: none; }
+
+  /* Compact header: smaller title + action buttons, wraps cleanly. */
+  .chat-header { padding: 9px 12px; gap: 8px; flex-wrap: wrap; }
+  .chat-header > div { min-width: 0; flex: 1 1 auto; }
+  .chat-header > div p { font-size: 0.62rem; }
+  .chat-header h2, :root[data-theme="dark"] .chat-header h2 { font-size: 0.86rem; max-width: 100%; white-space: normal; }
+  .header-actions { gap: 6px; flex-wrap: wrap; }
+  .header-actions button, .header-actions .ghost-button { padding: 7px 9px; font-size: 0.78rem; }
+
+  /* The generic page-intro repeats the nav label; drop it on mobile for room. */
+  .page-intro { display: none; }
+
+  /* Content breathing room + touch-friendly sizing */
+  .messages { padding: 14px 12px; }
+  .learn-intent-bar, .practice-tabs, .rad-tabs { width: 100%; }
+  .learn-intent-bar button { flex: 1 1 0; text-align: center; }
+  .stat-tiles.wide, :root[data-theme="dark"] .stat-tiles.wide { grid-template-columns: repeat(2, 1fr); }
+  .mermaid-diagram, :root[data-theme="dark"] .mermaid-diagram { padding: 10px; }
+  .flash-study { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .mode-group button strong { font-size: 0.72rem; }
+  .header-actions button, .header-actions .ghost-button { padding: 6px 8px; font-size: 0.74rem; }
+}
