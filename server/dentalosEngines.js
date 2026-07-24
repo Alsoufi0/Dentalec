@@ -39,7 +39,7 @@ export const dentalosEngines = {
     mode: 'visualLearning',
     outputLimit: 2200,
     prompt:
-      'Convert the topic into VISUAL structures the app renders graphically. Output the single most important diagram inside a fenced ```mermaid code block using valid "flowchart TD" syntax. Keep it FOCUSED: one clear process or concept map, roughly 6 to 14 nodes, not the whole document. Use short node labels and put EVERY label in double quotes, like A["Assign risk level"], so slashes, commas, and ampersands are safe. Then add one or two small Markdown tables for the key comparisons or classifications, each with a clear header row. Keep prose to a minimum; the output should be a diagram plus tight tables, not paragraphs.'
+      'Convert the topic into VISUAL structures the app renders graphically. Output ONE focused diagram inside a fenced ```mermaid code block using valid "flowchart TD" syntax. Keep it small: AT MOST 10 nodes showing the single most important process or hierarchy, NOT the whole document and NOT every subtopic. Use short node labels (2 to 4 words) and put EVERY label in double quotes, like A["Assign risk level"], so slashes, commas, and ampersands are safe. Then add one or two small Markdown tables for the key comparisons or classifications, each with a clear header row. Keep prose to a minimum; the output should be a small diagram plus tight tables, not paragraphs.'
   },
   memoryPlan: {
     label: 'Memory Engine',

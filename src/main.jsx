@@ -482,48 +482,68 @@ function InteractiveQuiz({ questions }) {
   );
 }
 
-// Quote flowchart node labels so special characters (/, &, commas, parentheses)
-// do not break Mermaid's parser. id[label] -> id["label"]; same for () and {}.
-function sanitizeMermaid(code) {
-  return String(code)
-    .replace(/\r/g, '')
-    .replace(/([A-Za-z0-9_]+)\[([^\]\n]*)\]/g, (m, id, label) => {
-      const clean = label.trim();
-      return /^".*"$/.test(clean) ? `${id}[${clean}]` : `${id}["${clean.replace(/"/g, "'")}"]`;
-    })
-    .replace(/([A-Za-z0-9_]+)\(([^)\n]*)\)/g, (m, id, label) => {
-      const clean = label.trim();
-      return /^".*"$/.test(clean) ? `${id}(${clean})` : `${id}("${clean.replace(/"/g, "'")}")`;
-    });
+// Pull the node labels and edges out of whatever (possibly messy) flowchart the
+// model produced, so we can either rebuild clean Mermaid or show a readable map.
+function parseMermaidGraph(code) {
+  const raw = String(code).replace(/\r/g, '');
+  const labels = {};
+  const nodeRe = /([A-Za-z0-9_]+)\s*(?:\[\s*"?([^\]"]*?)"?\s*\]|\(\s*"?([^)"]*?)"?\s*\)|\{\s*"?([^}"]*?)"?\s*\})/g;
+  let m;
+  while ((m = nodeRe.exec(raw)) !== null) {
+    const label = (m[2] ?? m[3] ?? m[4] ?? '').trim();
+    if (label) labels[m[1]] = label;
+  }
+  const edges = [];
+  const seen = new Set();
+  const edgeRe = /([A-Za-z0-9_]+)\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?\s*[-.=o<x]{0,3}-{1,3}[->ox]{1,3}\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_]+)/g;
+  while ((m = edgeRe.exec(raw)) !== null) {
+    if (m[1] === m[2]) continue;
+    const key = `${m[1]}|${m[2]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push([m[1], m[2]]);
+  }
+  return { labels, edges };
 }
 
-// Parse a flowchart's edges into readable parent -> child pairs, used as a
-// fallback so a student never sees raw diagram code if Mermaid cannot render.
-function mermaidToPairs(code) {
-  const labels = {};
-  const nodeRe = /([A-Za-z0-9_]+)\s*(?:\["?([^\]"]*)"?\]|\("?([^)"]*)"?\)|\{"?([^}"]*)"?\})/g;
-  let m;
-  while ((m = nodeRe.exec(code)) !== null) labels[m[1]] = (m[2] || m[3] || m[4] || m[1]).trim();
-  const pairs = [];
-  const edgeRe = /([A-Za-z0-9_]+)\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?\s*[-.=]{1,2}->?\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_]+)/g;
-  while ((m = edgeRe.exec(code)) !== null) {
-    const from = labels[m[1]] || m[1];
-    const to = labels[m[2]] || m[2];
-    if (from && to && from !== to) pairs.push([from, to]);
-  }
-  return pairs;
+// Clean a label so it is safe inside a quoted Mermaid node.
+function cleanMermaidLabel(text) {
+  return String(text || '')
+    .replace(/&/g, 'and')
+    .replace(/["'<>{}|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60) || 'Node';
+}
+
+// Rebuild guaranteed-valid Mermaid from the parsed structure (safe ids + quoted,
+// cleaned labels), capped so a diagram stays readable. This is what actually
+// renders reliably regardless of how messy the model's syntax was.
+function rebuildMermaid(code) {
+  const { labels, edges } = parseMermaidGraph(code);
+  if (!edges.length) return null;
+  const capped = edges.slice(0, 22);
+  const ids = [];
+  const idSet = new Set();
+  capped.forEach(([a, b]) => { [a, b].forEach((n) => { if (!idSet.has(n)) { idSet.add(n); ids.push(n); } }); });
+  const safe = {};
+  ids.forEach((n, i) => { safe[n] = `n${i}`; });
+  const lines = ['flowchart TD'];
+  ids.forEach((n) => { lines.push(`  ${safe[n]}["${cleanMermaidLabel(labels[n] || n)}"]`); });
+  capped.forEach(([a, b]) => { lines.push(`  ${safe[a]} --> ${safe[b]}`); });
+  return lines.join('\n');
 }
 
 function MermaidFallback({ code }) {
-  const pairs = mermaidToPairs(code);
-  if (!pairs.length) return null;
+  const { labels, edges } = parseMermaidGraph(code);
+  if (!edges.length) return null;
   return (
     <div className="mmd-fallback-map">
-      {pairs.map(([from, to], index) => (
+      {edges.slice(0, 30).map(([from, to], index) => (
         <div className="mmd-edge" key={index}>
-          <span>{from}</span>
+          <span>{labels[from] || from}</span>
           <ChevronRight size={14} />
-          <span>{to}</span>
+          <span>{labels[to] || to}</span>
         </div>
       ))}
     </div>
@@ -542,18 +562,25 @@ function MermaidBlock({ code }) {
       try {
         mermaidPromise ??= import('mermaid').then((m) => {
           const mermaid = m.default;
-          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', flowchart: { useMaxWidth: true } });
+          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', suppressErrorRendering: true, flowchart: { useMaxWidth: true } });
           return mermaid;
         });
         const mermaid = await mermaidPromise;
-        let out;
-        try {
-          const r = await mermaid.render('mmd-' + Math.random().toString(36).slice(2, 10), sanitizeMermaid(code));
-          out = r.svg;
-        } catch {
-          const r = await mermaid.render('mmd-' + Math.random().toString(36).slice(2, 10), String(code).trim());
-          out = r.svg;
+        // Try the clean rebuilt diagram first (most reliable), then the raw text.
+        const candidates = [rebuildMermaid(code), String(code).trim()].filter(Boolean);
+        let out = '';
+        for (const candidate of candidates) {
+          const rid = 'mmd-' + Math.random().toString(36).slice(2, 10);
+          try {
+            const r = await mermaid.render(rid, candidate);
+            out = r.svg;
+            break;
+          } catch {
+            document.getElementById(rid)?.remove();
+            document.getElementById('d' + rid)?.remove();
+          }
         }
+        if (!out) { if (alive) setFailed(true); return; }
         if (alive) setSvg(out);
       } catch {
         if (alive) setFailed(true);
