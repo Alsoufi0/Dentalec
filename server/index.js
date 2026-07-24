@@ -619,7 +619,7 @@ const modePrompts = {
   test:
     'Act as a professional oral-exam coach. If the student asks to be tested, use exactly these sections: Overview, Question 1 - Quick Recall, Question 2 - Clinical Vignette, Question 3 - Compare and Contrast, Question 4 - Anatomy or Mechanism, Question 5 - Error Spotting, Question 6 - Challenge Case, Answer Rubric, Next Step. Keep each question clearly separated. Use a Markdown table for Answer Rubric or marking criteria with columns such as Criteria, Marks, Comments. If the student is answering a prior quiz question, grade the answer kindly under Assessment, correct misconceptions under Correction, and ask one focused follow-up under Next Question.',
   answer:
-    'Answer the student question VISUALLY from the source material. Lead with the visual and keep prose to a minimum. Use a Markdown table for any comparison, classification, set of criteria, or feature list. For a process, pathway, sequence, or set of relationships, output a diagram inside a fenced ```mermaid code block using valid Mermaid syntax: prefer "flowchart TD" for processes and decision paths, or "mindmap" for how sub-topics branch from a main topic. Keep node labels short (a few words), avoid special characters and parentheses inside node text, and quote labels that need them. Only include a diagram when it genuinely clarifies; a clear table or a short list is fine when a diagram would not help. Include source references when available.'
+    'Answer the student question VISUALLY from the source material. Lead with the visual and keep prose to a minimum. Use a Markdown table for any comparison, classification, set of criteria, or feature list, and give EACH comparison its own small table with a clear header row (do not merge several comparisons into one big table). For a process, pathway, sequence, or set of relationships, output a diagram inside a fenced ```mermaid code block using valid "flowchart TD" syntax. Keep the diagram FOCUSED: one process or concept, roughly 5 to 12 nodes, not the whole document. Use short node labels (a few words). Put every node label in double quotes, like A["Collect history"], so slashes, commas, and ampersands are safe. Only include a diagram when it genuinely clarifies; a clear table is fine when a diagram would not help. Include source references when available.'
 };
 
 function clientKey(req) {
@@ -921,9 +921,13 @@ async function createResponse({ source, input, mode, history, persona = 'peer', 
     : hasSearchableSource
       ? 'A searchable uploaded source is available. Use file search before answering.'
       : 'No valid searchable source is attached for this local/test session. Use only the conversation and prompt context; if source context is missing, say so briefly instead of inventing citations.';
+  // Engine/artifact modes carry their own detailed instructions in the message,
+  // so they get a neutral fallback here rather than inheriting the visual Ask
+  // prompt (which would push tables/diagrams onto quizzes, cases, and plans).
+  const modeInstruction = modePrompts[mode] ?? 'Follow the instructions in the message and answer clearly and completely from the source.';
   const baseOptions = {
     model: defaultModel,
-    instructions: `${tutorInstructions}\n\n${styleClause}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nSource status: ${sourceStatus}\n\nMode: ${mode}. ${modePrompts[mode] ?? modePrompts.answer}`,
+    instructions: `${tutorInstructions}\n\n${styleClause}\n\n${personaInstructions[persona] ?? personaInstructions.peer}\n\nSource status: ${sourceStatus}\n\nMode: ${mode}. ${modeInstruction}`,
     max_output_tokens: maxOutputTokens
   };
 

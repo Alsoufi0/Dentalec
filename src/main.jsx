@@ -223,14 +223,19 @@ function scoreFromCell(value) {
 }
 
 function ResponseTable({ lines }) {
+  const hasSeparator = lines.some(isMarkdownSeparatorLine);
   const cleaned = lines.filter((line) => !isMarkdownSeparatorLine(line));
   if (!cleaned.length) return null;
   const rows = cleaned.map(parseTableRow).filter((row) => row.some(Boolean));
   if (!rows.length) return null;
   const [header, ...body] = rows;
-  const likelyHeader = header.some((cell) => /criteria|marks|score|comments|finding|feature|step|task|rubric|domain/i.test(cell));
-  const dataRows = likelyHeader ? body : rows;
-  const headers = likelyHeader ? header : rows[0].map((_, index) => `Column ${index + 1}`);
+  // A Markdown table's first row is its header. The |---| separator marks that,
+  // so when a separator is present always treat row 0 as the header. Fall back
+  // to a keyword guess only for stray pipe rows with no separator.
+  const keywordHeader = header.some((cell) => /criteria|marks|score|comments|finding|feature|step|task|rubric|domain|aspect|risk|type|sign|cause|indicat|category|item|column/i.test(cell));
+  const useFirstAsHeader = hasSeparator || keywordHeader;
+  const dataRows = useFirstAsHeader ? body : rows;
+  const headers = useFirstAsHeader ? header : rows[0].map((_, index) => `Column ${index + 1}`);
   const scoreColumnIndex = headers.findIndex((header) => /mark|score/i.test(header));
   const labelColumnIndex = headers.findIndex((header) => /criteria|domain|skill|task|question|module|step|finding|feature/i.test(header));
   const scoreRows = scoreColumnIndex >= 0
@@ -477,6 +482,54 @@ function InteractiveQuiz({ questions }) {
   );
 }
 
+// Quote flowchart node labels so special characters (/, &, commas, parentheses)
+// do not break Mermaid's parser. id[label] -> id["label"]; same for () and {}.
+function sanitizeMermaid(code) {
+  return String(code)
+    .replace(/\r/g, '')
+    .replace(/([A-Za-z0-9_]+)\[([^\]\n]*)\]/g, (m, id, label) => {
+      const clean = label.trim();
+      return /^".*"$/.test(clean) ? `${id}[${clean}]` : `${id}["${clean.replace(/"/g, "'")}"]`;
+    })
+    .replace(/([A-Za-z0-9_]+)\(([^)\n]*)\)/g, (m, id, label) => {
+      const clean = label.trim();
+      return /^".*"$/.test(clean) ? `${id}(${clean})` : `${id}("${clean.replace(/"/g, "'")}")`;
+    });
+}
+
+// Parse a flowchart's edges into readable parent -> child pairs, used as a
+// fallback so a student never sees raw diagram code if Mermaid cannot render.
+function mermaidToPairs(code) {
+  const labels = {};
+  const nodeRe = /([A-Za-z0-9_]+)\s*(?:\["?([^\]"]*)"?\]|\("?([^)"]*)"?\)|\{"?([^}"]*)"?\})/g;
+  let m;
+  while ((m = nodeRe.exec(code)) !== null) labels[m[1]] = (m[2] || m[3] || m[4] || m[1]).trim();
+  const pairs = [];
+  const edgeRe = /([A-Za-z0-9_]+)\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?\s*[-.=]{1,2}->?\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_]+)/g;
+  while ((m = edgeRe.exec(code)) !== null) {
+    const from = labels[m[1]] || m[1];
+    const to = labels[m[2]] || m[2];
+    if (from && to && from !== to) pairs.push([from, to]);
+  }
+  return pairs;
+}
+
+function MermaidFallback({ code }) {
+  const pairs = mermaidToPairs(code);
+  if (!pairs.length) return null;
+  return (
+    <div className="mmd-fallback-map">
+      {pairs.map(([from, to], index) => (
+        <div className="mmd-edge" key={index}>
+          <span>{from}</span>
+          <ChevronRight size={14} />
+          <span>{to}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Lazy Mermaid renderer for ```mermaid diagrams in the visual (Ask) mode.
 // Mermaid loads only when a diagram actually appears on screen.
 let mermaidPromise;
@@ -493,8 +546,14 @@ function MermaidBlock({ code }) {
           return mermaid;
         });
         const mermaid = await mermaidPromise;
-        const id = 'mmd-' + Math.random().toString(36).slice(2, 10);
-        const { svg: out } = await mermaid.render(id, code.trim());
+        let out;
+        try {
+          const r = await mermaid.render('mmd-' + Math.random().toString(36).slice(2, 10), sanitizeMermaid(code));
+          out = r.svg;
+        } catch {
+          const r = await mermaid.render('mmd-' + Math.random().toString(36).slice(2, 10), String(code).trim());
+          out = r.svg;
+        }
         if (alive) setSvg(out);
       } catch {
         if (alive) setFailed(true);
@@ -502,7 +561,7 @@ function MermaidBlock({ code }) {
     })();
     return () => { alive = false; };
   }, [code]);
-  if (failed) return <pre className="mermaid-fallback">{code.trim()}</pre>;
+  if (failed) return <MermaidFallback code={code} />;
   if (!svg) return <div className="mermaid-loading">Rendering diagram...</div>;
   return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

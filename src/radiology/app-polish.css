@@ -683,3 +683,9 @@
 :root[data-theme="dark"] .learn-summary-head strong { display: block; font-size: 1rem; color: var(--c-text, #e8eef9); }
 :root[data-theme="dark"] .learn-summary-head span { display: block; color: var(--c-muted, #8794ab); font-size: 0.83rem; margin-top: 3px; }
 :root[data-theme="dark"] .learn-summary-head .primary-chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+
+/* Mermaid fallback: readable parent -> child relationships (never raw code) */
+:root[data-theme="dark"] .mmd-fallback-map { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; padding: 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 14px; background: var(--c-panel, #111722); }
+:root[data-theme="dark"] .mmd-edge { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--c-text, #e8eef9); }
+:root[data-theme="dark"] .mmd-edge span { padding: 4px 10px; border: 1px solid var(--c-line-2, #2e3950); border-radius: 8px; background: var(--c-bg, #0a0e14); }
+:root[data-theme="dark"] .mmd-edge svg { color: var(--c-accent, #36d6c3); flex: 0 0 auto; }

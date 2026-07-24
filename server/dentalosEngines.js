@@ -25,7 +25,7 @@ export const dentalosEngines = {
     mode: 'examinerQuestions',
     outputLimit: 2400,
     prompt:
-      'Create a board-exam and oral-exam question set. Include MCQs, oral questions, case-based questions, practical exam prompts, and a marking rubric table with marks and examiner comments.'
+      'Create 6 board-style multiple-choice questions from the source. Format EACH question EXACTLY like this so it renders as an interactive quiz: a question line, then four options each on its own line written as "A) ...", "B) ...", "C) ...", "D) ...", then a line "Answer: X" (the correct letter), then a line "Explanation: ..." (one sentence). Separate questions with a blank line. Do not add headings, numbering, tables, or extra commentary; output only the questions in that exact format. Make them clinically relevant and cover different parts of the source.'
   },
   clinicalCase: {
     label: 'Clinical Case Simulator',
@@ -39,7 +39,7 @@ export const dentalosEngines = {
     mode: 'visualLearning',
     outputLimit: 2200,
     prompt:
-      'Convert the topic into VISUAL structures the app renders graphically. Output one or more diagrams inside fenced ```mermaid code blocks using valid Mermaid syntax: use "flowchart TD" for processes, decision trees, pathways, and algorithms, and "mindmap" for how sub-topics branch from the main topic. Keep node labels short (a few words), avoid parentheses and special characters inside node text, and quote any label that needs them. Add Markdown tables for comparisons and classifications. Lead with the single most important diagram. Keep prose to a minimum; the output should be mostly diagrams and tables, not paragraphs.'
+      'Convert the topic into VISUAL structures the app renders graphically. Output the single most important diagram inside a fenced ```mermaid code block using valid "flowchart TD" syntax. Keep it FOCUSED: one clear process or concept map, roughly 6 to 14 nodes, not the whole document. Use short node labels and put EVERY label in double quotes, like A["Assign risk level"], so slashes, commas, and ampersands are safe. Then add one or two small Markdown tables for the key comparisons or classifications, each with a clear header row. Keep prose to a minimum; the output should be a diagram plus tight tables, not paragraphs.'
   },
   memoryPlan: {
     label: 'Memory Engine',
