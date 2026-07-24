@@ -663,10 +663,13 @@
 
 /* Mermaid visual diagrams (Ask mode) */
 :root[data-theme="dark"] .mermaid-diagram {
+  width: 100%; box-sizing: border-box;
   margin: 12px 0; padding: 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 14px;
-  background: var(--c-panel, #111722); overflow-x: auto; text-align: center;
+  background: var(--c-panel, #111722); overflow-x: auto; overflow-y: hidden; text-align: left;
 }
-:root[data-theme="dark"] .mermaid-diagram svg { max-width: 100%; height: auto; }
+/* Render at natural, readable size and scroll when wide, instead of shrinking a
+   big diagram down to an unreadable thumbnail. */
+:root[data-theme="dark"] .mermaid-diagram svg { max-width: none; height: auto; display: block; }
 :root[data-theme="dark"] .mermaid-loading { margin: 12px 0; padding: 16px; border: 1px dashed var(--c-line-2, #2e3950); border-radius: 12px; color: var(--c-muted, #8794ab); font-size: 0.84rem; }
 :root[data-theme="dark"] .mermaid-fallback {
   margin: 12px 0; padding: 12px 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 12px;

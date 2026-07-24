@@ -522,7 +522,7 @@ function cleanMermaidLabel(text) {
 function rebuildMermaid(code) {
   const { labels, edges } = parseMermaidGraph(code);
   if (!edges.length) return null;
-  const capped = edges.slice(0, 22);
+  const capped = edges.slice(0, 16);
   const ids = [];
   const idSet = new Set();
   capped.forEach(([a, b]) => { [a, b].forEach((n) => { if (!idSet.has(n)) { idSet.add(n); ids.push(n); } }); });
@@ -562,7 +562,7 @@ function MermaidBlock({ code }) {
       try {
         mermaidPromise ??= import('mermaid').then((m) => {
           const mermaid = m.default;
-          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', suppressErrorRendering: true, flowchart: { useMaxWidth: true } });
+          mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', suppressErrorRendering: true, flowchart: { useMaxWidth: false, nodeSpacing: 28, rankSpacing: 42 } });
           return mermaid;
         });
         const mermaid = await mermaidPromise;
