@@ -317,11 +317,32 @@
 :root[data-theme="dark"] .msg-del { margin-left: auto; }
 
 /* ---- App-like shell: bound the desktop layout to the viewport so content
-   scrolls INSIDE panels instead of growing the page (no endless pages). ---- */
-@media (min-width: 921px) {
+   scrolls INSIDE panels instead of growing the page (no endless pages). Only
+   do this when the window is tall enough; on short laptop windows fall back to
+   natural page scroll so the sidebar and content are never trapped/cut off. ---- */
+@media (min-width: 921px) and (min-height: 760px) {
   .workspace { height: calc(100vh - 32px); min-height: 0; }
   .study-panel { overflow-y: auto; }
   .chat-panel { min-height: 0; }
+}
+
+/* Compact sidebar so the whole 12-item nav fits on a laptop instead of being
+   trapped in a cramped scroll area (the "sidebar cut off / orientation" issue).
+   Nav rows go single-line, decorative hints are dropped, panels tighten up. */
+@media (min-width: 921px) {
+  .study-panel { gap: 8px; padding: 12px 12px 14px; }
+  .brand-row { gap: 8px; }
+  .mode-group { gap: 5px; }
+  .mode-group button { min-height: 0; padding: 8px 11px; }
+  :root[data-theme="dark"] .mode-group small { display: none; }
+  :root[data-theme="dark"] .account-strip,
+  :root[data-theme="dark"] .usage-strip,
+  :root[data-theme="dark"] .source-strip,
+  :root[data-theme="dark"] .voice-card,
+  :root[data-theme="dark"] .persona-control select { padding-top: 9px; padding-bottom: 9px; }
+  :root[data-theme="dark"] .study-snapshot { padding: 11px 12px; }
+  .study-panel::-webkit-scrollbar { width: 8px; }
+  .study-panel::-webkit-scrollbar-thumb { background: var(--c-line-2, #2e3950); border-radius: 8px; }
 }
 /* Flashcard browse list stays compact + scrolls internally */
 .flash-browse { margin-top: 4px; border-top: 1px solid var(--c-line, #232c3d); padding-top: 10px; }
