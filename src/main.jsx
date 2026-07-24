@@ -51,7 +51,7 @@ import { CasesPage, RadiologyPage, InterpreterPage } from './radiology/index.jsx
 
 // Radiology routes render their own dark clinical chrome, so the generic
 // page-intro header is suppressed for them.
-const RAD_PAGES = ['cases', 'radiology', 'interpreter'];
+const RAD_PAGES = ['cases', 'radiology', 'interpreter', 'radiologyHub'];
 
 const API_BASE = '/api';
 const STORAGE_KEY = 'simav-dental-tutor-state-v1';
@@ -75,22 +75,20 @@ const pages = [
   { id: 'cases', label: 'Case Library', icon: Layers, hint: 'x-ray cases', prompt: 'Browse and filter teaching radiographs, then open one in the viewer.' },
   { id: 'radiology', label: 'Radiology Viewer', icon: Activity, hint: 'viewer', prompt: 'Zoom, window, measure, and study annotated structures on an X-ray.' },
   { id: 'interpreter', label: 'X-ray Interpreter', icon: Sparkles, hint: 'AI feedback', prompt: 'Write your reading of a film and get instant AI feedback.' },
-  { id: 'kit', label: 'Study Kit', icon: Library, hint: 'notes & cards', prompt: 'Saved notes, generated flashcards, exports, and review material.' }
+  { id: 'kit', label: 'Study Kit', icon: Library, hint: 'notes & cards', prompt: 'Saved notes, generated flashcards, exports, and review material.' },
+  { id: 'learn', label: 'Learn', icon: Brain, hint: 'tutor', prompt: 'Ask, explain, or summarize in one continuous tutor conversation from your active source.' },
+  { id: 'practice', label: 'Practice', icon: FileQuestion, hint: 'active recall', prompt: 'Flashcards, quiz yourself, and work clinical cases from your source.' },
+  { id: 'radiologyHub', label: 'Radiology', icon: Activity, hint: 'x-ray', prompt: 'Browse teaching radiographs and get AI feedback on your reading.' }
 ];
 
+// Six clear areas. The primary study loop, then Radiology as a distinct tool.
 const sidebarItems = [
-  { page: 'dashboard', label: 'Home', icon: Home, hint: 'command' },
-  { page: 'explanation', label: 'Study', icon: BookOpen, hint: 'learn' },
-  { page: 'library', label: 'Notes & Books', icon: Library, hint: 'your sources' },
-  { page: 'answer', label: 'AI Tutor', icon: Brain, hint: 'ask anything' },
-  { page: 'engines', label: 'Study Tools', icon: CircleHelp, hint: 'from notes' },
-  { page: 'kit', label: 'Flashcards', icon: BookmarkPlus, hint: 'review' },
-  { page: 'clinic', label: 'Clinical Cases', icon: Stethoscope, hint: 'practice' },
-  { page: 'test', label: 'Exams', icon: FileQuestion, hint: 'oral practice' },
-  { page: 'cases', label: 'Radiology', icon: Activity, hint: 'x-ray cases' },
-  { page: 'interpreter', label: 'X-ray Interpreter', icon: ScanSearch, hint: 'AI feedback' },
+  { page: 'dashboard', label: 'Home', icon: Home, hint: 'study path' },
+  { page: 'library', label: 'Library', icon: Library, hint: 'your sources' },
+  { page: 'learn', label: 'Learn', icon: Brain, hint: 'tutor + aids' },
+  { page: 'practice', label: 'Practice', icon: FileQuestion, hint: 'cards, quiz, cases' },
   { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'your activity' },
-  { page: 'summary', label: 'Summary', icon: FileText, hint: 'recaps' }
+  { page: 'radiologyHub', label: 'Radiology', icon: Activity, hint: 'x-ray', section: 'clinical' }
 ];
 
 const stopPhrases = [
@@ -845,6 +843,45 @@ function HowToUse({ navigate, compact = false }) {
   );
 }
 
+// A clear, ordered path so a student always knows the next step. Every "done"
+// state is derived from real per-source activity, so it ticks off as they work.
+function StudyPath({ steps, stats }) {
+  const total = steps.length;
+  const doneCount = steps.filter((step) => step.done).length;
+  const nextIndex = steps.findIndex((step) => !step.done);
+  return (
+    <article className="study-path glass-panel">
+      <div className="study-path-head">
+        <div>
+          <strong>Your study path</strong>
+          <span>Work through these steps to learn this source well.</span>
+        </div>
+        <span className="study-path-count">{doneCount} of {total}</span>
+      </div>
+      <div className="study-path-progress"><i style={{ width: `${Math.round((doneCount / total) * 100)}%` }} /></div>
+      <ol className="study-path-steps">
+        {steps.map((step, index) => (
+          <li key={step.label} className={`study-path-step${step.done ? ' is-done' : ''}${index === nextIndex ? ' is-next' : ''}`}>
+            <span className="sp-num">{step.done ? <CheckCircle2 size={16} /> : index + 1}</span>
+            <span className="sp-body">
+              <strong>{step.label}</strong>
+              {index === nextIndex && <em>Next step</em>}
+            </span>
+            <button type="button" className="sp-action" onClick={step.onAction} disabled={step.disabled}>{step.actionLabel}</button>
+          </li>
+        ))}
+      </ol>
+      {stats && (
+        <div className="study-path-stats">
+          <span><strong>{stats.total}</strong> flashcards</span>
+          <span><strong>{stats.reviewed}</strong> reviewed</span>
+          <span><strong>{stats.due}</strong> to review</span>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function ModeWorkspace({ page, studySet, busy, submitStudy, createArtifact, navigate }) {
   const workflow = modeWorkflows[page];
   if (!workflow) return null;
@@ -904,7 +941,7 @@ function parseLatestMcq(chat = []) {
   return null;
 }
 
-function CommandCenterDashboard({ user, studyStats, flashcards, chat, studySet, busy, navigate, createArtifact, submitStudy }) {
+function CommandCenterDashboard({ user, studyStats, flashcards, chat, studySet, busy, navigate, createArtifact, submitStudy, startSummary, startQuiz }) {
   const [selectedStructure, setSelectedStructure] = useState('dentin');
   const [selectedTab, setSelectedTab] = useState('overview');
   const [learningLevel, setLearningLevel] = useState(4);
@@ -947,130 +984,61 @@ function CommandCenterDashboard({ user, studyStats, flashcards, chat, studySet, 
     if (action.artifact) createArtifact(action.artifact);
   }
 
+  const summaryDone = chat.some((item) => item.role === 'assistant' && item.mode === 'summary');
+  const testDone = chat.some((item) => item.role === 'assistant' && item.mode === 'test');
+  const steps = [
+    { label: 'Add your material', done: hasSource, actionLabel: hasSource ? 'Added' : 'Add source', onAction: () => navigate('library'), disabled: hasSource },
+    { label: 'Read a summary', done: summaryDone, actionLabel: 'Summarize', onAction: startSummary, disabled: !hasSource || !!busy },
+    { label: 'Make flashcards', done: flashcards.length > 0, actionLabel: 'Make cards', onAction: () => createArtifact('flashcards'), disabled: !hasSource || !!busy },
+    { label: 'Review your cards', done: studyStats.reviewed > 0, actionLabel: 'Review', onAction: () => navigate('mastery'), disabled: !flashcards.length },
+    { label: 'Test yourself', done: testDone, actionLabel: 'Quiz me', onAction: startQuiz, disabled: !hasSource || !!busy }
+  ];
+
   return (
-    <section className="command-center" aria-label="DentalOS AI command center">
-      <div className="command-topbar">
-        <label className="command-search">
-          <Search size={17} />
-          <input
-            placeholder="Ask about any dental topic, then press Enter"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && event.currentTarget.value.trim()) {
-                submitStudy(`Teach me about ${event.currentTarget.value.trim()} with exam pearls, clinical relevance, and common mistakes.`);
-                event.currentTarget.value = '';
-              }
-            }}
-          />
-        </label>
-        {hasSource && studyStats.dueCards.length > 0 && (
-          <button type="button" className="topbar-due" onClick={() => navigate('mastery')}>
-            <Bell size={16} />
-            {studyStats.dueCards.length} due
-          </button>
-        )}
-      </div>
+    <section className="command-center" aria-label="Home">
+      {hasSource && (
+        <div className="command-topbar">
+          <label className="command-search">
+            <Search size={17} />
+            <input
+              placeholder="Ask a quick question, then press Enter"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && event.currentTarget.value.trim()) {
+                  submitStudy(`Teach me about ${event.currentTarget.value.trim()} with exam pearls, clinical relevance, and common mistakes.`);
+                  event.currentTarget.value = '';
+                  navigate('learn');
+                }
+              }}
+            />
+          </label>
+          {studyStats.dueCards.length > 0 && (
+            <button type="button" className="topbar-due" onClick={() => navigate('mastery')}>
+              <Bell size={16} />
+              {studyStats.dueCards.length} due
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="command-greeting">
         <div>
-          <h2>Good morning, {firstName}.</h2>
-          <p>{hasSource ? 'Pick up where you left off, or explore the tooth model below.' : 'Add a study source to begin.'}</p>
+          <h2>Welcome back, {firstName}.</h2>
+          <p>{hasSource ? `Studying ${sourceName}. Follow your study path below.` : 'Add a study source to begin.'}</p>
         </div>
-        <button type="button" onClick={() => navigate(studySet ? 'answer' : 'library')}>
+        <button type="button" onClick={() => navigate(hasSource ? 'learn' : 'library')}>
           <Sparkles size={17} />
-          {studySet ? 'Continue studying' : 'Add study source'}
+          {hasSource ? 'Open Learn' : 'Add study source'}
         </button>
       </div>
 
       {!hasSource && <HowToUse navigate={navigate} />}
 
       {hasSource && (
-        <div className="active-source-strip">
-          <FileText size={16} />
-          <span>Studying from {sourceName}</span>
-        </div>
+        <StudyPath
+          steps={steps}
+          stats={{ total: studyStats.total, reviewed: studyStats.reviewed, due: studyStats.dueCards.length }}
+        />
       )}
-
-      {hasSource && <div className="dash-feature-grid">
-        <article className="anatomy-panel glass-panel">
-          <div className="panel-title">
-            <div>
-              <strong>Interactive Tooth Anatomy</strong>
-              <span>Tap any layer of the cross-section to study it</span>
-            </div>
-            <button type="button" onClick={() => setSelectedStructure('dentin')}>Reset</button>
-          </div>
-          <div className="anatomy-workspace">
-            <div className="anatomy-tabs">
-              {anatomyStructures.map((item) => (
-                <button key={item.id} type="button" className={selectedStructure === item.id ? 'active' : ''} onClick={() => setSelectedStructure(item.id)}>
-                  <span className="layer-swatch" style={{ background: item.color }} />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <InteractiveTooth selected={selectedStructure} onSelect={setSelectedStructure} />
-            <div className="structure-card">
-              <strong>{structure.label}</strong>
-              <span className="structure-tissue">{structure.tissue}</span>
-              <p>{structure.detail}</p>
-              <h4>Key Points</h4>
-              {structure.points.map((point) => <span key={point}><CheckCircle2 size={14} />{point}</span>)}
-              <h4>Related Topics</h4>
-              <div className="related-pills">
-                {structure.related.map((topic) => (
-                  <button type="button" key={topic} onClick={() => submitStudy(`Teach me ${topic} from my active source. Include prerequisite concepts, clinical relevance, common misconceptions, and exam pearls.`)}>
-                    {topic}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <div className="analytics-panel stacked glass-panel">
-            <div className="panel-title">
-              <strong>Your activity on this source</strong>
-              <button type="button" className="panel-link" onClick={() => navigate('mastery')}>Open Progress</button>
-            </div>
-            {hasActivity ? (
-              <div className="stat-tiles">
-                {activityMetrics.map((metric) => (
-                  <div className="stat-tile" key={metric.label}>
-                    <strong>{metric.value}</strong>
-                    <span>{metric.label}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="trend-empty">Ask the tutor a question and build some flashcards. Your real activity shows up here.</p>
-            )}
-            {studyStats.dueCards.length > 0 && (
-              <button type="button" className="review-cta" onClick={() => navigate('mastery')}>
-                <BookmarkPlus size={16} />
-                Review {studyStats.dueCards.length} card{studyStats.dueCards.length > 1 ? 's' : ''} due now
-              </button>
-            )}
-        </div>
-      </div>}
-
-      {hasSource && <div className="dash-tools">
-        <div className="dash-tools-head">
-          <strong>Study tools</strong>
-          <span>Generate grounded material from your source</span>
-        </div>
-        <div className="command-actions">
-          {commandActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button key={action.title} type="button" onClick={() => runAction(action)} disabled={!!busy}>
-                <span><Icon size={22} /></span>
-                <strong>{action.title}</strong>
-                <small>{action.subtitle}</small>
-              </button>
-            );
-          })}
-        </div>
-      </div>}
     </section>
   );
 }
@@ -1086,6 +1054,9 @@ function App() {
   const [sourceData, setSourceData] = useState({});
   const [mode, setMode] = useState('answer');
   const [page, setPage] = useState('dashboard');
+  const [practiceTab, setPracticeTab] = useState('flashcards');
+  const [radTab, setRadTab] = useState('cases');
+  const [lastPracticeKind, setLastPracticeKind] = useState('');
   const [radCaseId, setRadCaseId] = useState(null);
   const [selectedEngine, setSelectedEngine] = useState('knowledgeGap');
   const [message, setMessage] = useState('');
@@ -1554,12 +1525,13 @@ function App() {
       return true;
     }
     if (normalized.includes('study kit') || normalized.includes('flashcards')) {
-      navigate('kit');
+      navigate('practice');
+      setPracticeTab('flashcards');
       return true;
     }
     if (normalized.includes('summarize')) {
-      navigate('summary');
-      submitStudy('Summarize this study source for a dental exam.', { speak: true });
+      navigate('learn');
+      submitStudy('Summarize this study source for a dental exam.', { speak: true, mode: 'summary' });
       return true;
     }
     if (normalized.includes('case study') || normalized.includes('vignette')) {
@@ -1571,8 +1543,9 @@ function App() {
       return true;
     }
     if (normalized.includes('quiz') || normalized.includes('test me')) {
-      navigate('test');
-      submitStudy('Start a 5-minute oral quiz on the highest-yield material in this study source.', { speak: true });
+      navigate('practice');
+      setPracticeTab('quiz');
+      submitStudy('Start a 5-minute oral quiz on the highest-yield material in this study source.', { speak: true, mode: 'test' });
       return true;
     }
     return false;
@@ -1935,14 +1908,15 @@ function App() {
         writer.setFlashcards((items) => [...cards, ...items]);
         setActiveCardIndex(0);
         setRevealedCards({});
-        setPage('kit');
+        setPage('practice');
+        setPracticeTab('flashcards');
         const skipped = parsed.length - cards.length;
         writer.setChat((items) => [
           ...items,
           {
             role: 'assistant',
             text: cards.length
-              ? `Added ${cards.length} new flashcard${cards.length > 1 ? 's' : ''} to the Study Kit${skipped ? `, and skipped ${skipped} that repeated cards you already have.` : '.'}`
+              ? `Added ${cards.length} new flashcard${cards.length > 1 ? 's' : ''} to your deck${skipped ? `, and skipped ${skipped} that repeated cards you already have.` : '.'}`
               : parsed.length
                 ? 'Those all matched flashcards you already have. Try a different part of the source, or add another source.'
                 : 'I could not format those as flashcards. Tap Make cards to try again.',
@@ -1955,17 +1929,19 @@ function App() {
 
       const testArtifacts = ['weakQuiz', 'caseStudy', 'osce', 'examinerQuestions', 'clinicalCase'];
       const kitArtifacts = ['notes', 'adaptivePlan', 'curriculumMap', 'clinicalVisionChecklist', 'mnemonics', 'memoryPlan'];
-      if (kitArtifacts.includes(type)) {
-        writer.setNotes(data.text);
-        setPage('kit');
-      }
       if (testArtifacts.includes(type)) {
-        setPage('test');
+        // Quizzes go to the Quiz tab; worked cases go to the Clinical cases tab.
+        const kind = (type === 'examinerQuestions' || type === 'weakQuiz') ? 'quiz' : 'cases';
         setMode('test');
-      }
-      if (!kitArtifacts.includes(type) && !testArtifacts.includes(type)) {
-        setPage('summary');
+        setPracticeTab(kind);
+        setLastPracticeKind(kind);
+        setPage('practice');
+      } else {
+        // Reading-type aids (differentials, protocols, notes, plans) land in the
+        // Learn conversation.
+        if (kitArtifacts.includes(type)) writer.setNotes(data.text);
         setMode('summary');
+        setPage('learn');
       }
 
       writer.setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: makeId() }]);
@@ -1986,6 +1962,10 @@ function App() {
     const trimmed = customMessage.trim();
     if (!studySet?.vectorStoreId || !trimmed) return;
 
+    // The caller can pin the mode for this one message (used by the Learn
+    // intent bar, the Home study path, and the Practice quiz) so it does not
+    // depend on the async `mode` state landing first.
+    const effMode = options.mode || mode;
     // Bind writes to the source the student is asking about, so switching
     // source mid-answer never routes the reply to the wrong deck/chat.
     const key = activeSourceId || 'unassigned';
@@ -1995,7 +1975,7 @@ function App() {
     setBusy('study');
     setError('');
     setMessage('');
-    const userItem = { role: 'user', text: trimmed, mode, id: makeId() };
+    const userItem = { role: 'user', text: trimmed, mode: effMode, id: makeId() };
     const history = chat.slice(-8).map(({ role, text }) => ({ role, text }));
     writer.setChat((items) => [...items, userItem]);
 
@@ -2007,7 +1987,7 @@ function App() {
         body: JSON.stringify({
           sourceId: activeSourceId,
           message: trimmed,
-          mode,
+          mode: effMode,
           history,
           persona: voicePersona
         })
@@ -2015,7 +1995,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Study request failed');
       bumpUsage('aiCalls');
-      const assistantItem = { role: 'assistant', text: data.text, mode, id: makeId() };
+      const assistantItem = { role: 'assistant', text: data.text, mode: effMode, id: makeId() };
       writer.setChat((items) => [...items, assistantItem]);
       if (conversationMode || options.speak) {
         await speak(assistantItem, { force: true });
@@ -2026,6 +2006,21 @@ function App() {
       busyRef.current = '';
       setBusy('');
     }
+  }
+
+  // Study-path / cross-page shortcuts that pin the mode for the request.
+  function startSummary() {
+    setMode('summary');
+    navigate('learn');
+    submitStudy(modeWorkflows.summary.prompt, { mode: 'summary' });
+  }
+
+  function startQuiz() {
+    setMode('test');
+    setPracticeTab('quiz');
+    setLastPracticeKind('quiz');
+    navigate('practice');
+    submitStudy(modeWorkflows.test.prompt, { mode: 'test' });
   }
 
   async function startRecording() {
@@ -2234,6 +2229,36 @@ function App() {
 
   const ActivePageIcon = activePage.icon;
 
+  // Shared transcript renderer (Learn shows the whole conversation; legacy mode
+  // pages and Practice tabs pass a filtered slice).
+  function renderMessages(list) {
+    return list.map((item) => (
+      <article key={item.id} className={`message ${item.role}`}>
+        {item.role === 'assistant' ? <ResponseContent text={item.text} mode={item.mode} /> : <p>{item.text}</p>}
+        <div className="message-actions">
+          {item.role === 'assistant' && (
+            <>
+              <button type="button" className="listen" onClick={() => speak(item)}>
+                {speakingId === item.id ? <Pause size={16} /> : <Volume2 size={16} />}
+                {speakingId === item.id ? 'Stop' : 'Listen'}
+              </button>
+              <button type="button" className="listen" onClick={() => createArtifact('flashcards', item.text)} disabled={!!busy}>
+                <BookmarkPlus size={16} />
+                Cards
+              </button>
+            </>
+          )}
+          <button type="button" className="listen msg-del" onClick={() => deleteMessage(item.id)} title="Delete this message">
+            <Trash2 size={16} />
+            Delete
+          </button>
+        </div>
+      </article>
+    ));
+  }
+
+  const showComposer = page === 'learn' || page === 'practice' || modes.some((m) => m.id === page);
+
   if (auth.status === 'loading') {
     return (
       <main className="app-shell auth-shell">
@@ -2400,19 +2425,21 @@ function App() {
             {sidebarItems.map((item) => {
               const Icon = item.icon;
               return (
-                <button
-                  key={`${item.label}-${item.page}`}
-                  className={page === item.page ? 'active' : ''}
-                  type="button"
-                  onClick={() => navigate(item.page)}
-                  title={item.label}
-                >
-                  <Icon size={18} />
-                  <span>
-                    <strong>{item.label}</strong>
-                    <small>{item.hint}</small>
-                  </span>
-                </button>
+                <React.Fragment key={`${item.label}-${item.page}`}>
+                  {item.section === 'clinical' && <div className="nav-divider" aria-hidden="true" />}
+                  <button
+                    className={page === item.page ? 'active' : ''}
+                    type="button"
+                    onClick={() => navigate(item.page)}
+                    title={item.label}
+                  >
+                    <Icon size={18} />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.hint}</small>
+                    </span>
+                  </button>
+                </React.Fragment>
               );
             })}
           </nav>
@@ -2494,6 +2521,8 @@ function App() {
                   navigate={navigate}
                   createArtifact={createArtifact}
                   submitStudy={submitStudy}
+                  startSummary={startSummary}
+                  startQuiz={startQuiz}
                 />
                 {!studySet && (
                   <div
@@ -2913,6 +2942,158 @@ function App() {
               <RadiologyPage caseId={radCaseId} navigate={navigate} />
             ) : page === 'interpreter' ? (
               <InterpreterPage caseId={radCaseId} setCaseId={setRadCaseId} />
+            ) : page === 'learn' ? (
+              !studySet ? (
+                <div className="engines-need-source">
+                  <span>Add a study source first, then ask, explain, or summarize from your own material.</span>
+                  <button type="button" onClick={() => navigate('library')}>Add a source</button>
+                </div>
+              ) : (
+                <section className="learn-page">
+                  <div className="learn-intent-bar" role="tablist" aria-label="How should the tutor answer">
+                    {[['answer', 'Ask'], ['explanation', 'Explain'], ['summary', 'Summarize']].map(([m, label]) => (
+                      <button key={m} type="button" className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>{label}</button>
+                    ))}
+                  </div>
+                  <div className="learn-aids-row">
+                    <span className="learn-aids-label">Study aids</span>
+                    <button type="button" onClick={startSummary} disabled={!!busy}>Summary</button>
+                    <button type="button" onClick={() => createArtifact('differentialDiagnosis')} disabled={!!busy}>Key differences</button>
+                    <button type="button" onClick={() => createArtifact('visualLearning')} disabled={!!busy}>Concept map</button>
+                    <button type="button" onClick={() => createArtifact('knowledgeGap')} disabled={!!busy}>Knowledge gaps</button>
+                    <button type="button" onClick={() => createArtifact('treatmentProtocol')} disabled={!!busy}>Treatment protocol</button>
+                    <button type="button" onClick={() => createArtifact('radiologyChecklist')} disabled={!!busy}>Radiology checklist</button>
+                  </div>
+                  {chat.length === 0 && (
+                    <p className="learn-hint">Ask a question below, or tap a study aid. Everything stays in this one conversation, and switching Ask / Explain / Summarize never clears it.</p>
+                  )}
+                  {renderMessages(chat)}
+                </section>
+              )
+            ) : page === 'practice' ? (
+              <section className="practice-page">
+                <div className="practice-tabs" role="tablist">
+                  <button type="button" role="tab" className={practiceTab === 'flashcards' ? 'active' : ''} onClick={() => setPracticeTab('flashcards')}>Flashcards</button>
+                  <button type="button" role="tab" className={practiceTab === 'quiz' ? 'active' : ''} onClick={() => setPracticeTab('quiz')}>Quiz me</button>
+                  <button type="button" role="tab" className={practiceTab === 'cases' ? 'active' : ''} onClick={() => setPracticeTab('cases')}>Clinical cases</button>
+                </div>
+                {!studySet && (
+                  <div className="engines-need-source">
+                    <span>Add a study source first so these are built from your own material.</span>
+                    <button type="button" onClick={() => navigate('library')}>Add a source</button>
+                  </div>
+                )}
+                {practiceTab === 'flashcards' && (
+                  <div className="kit-section">
+                    <div className="practice-actions">
+                      <button type="button" className="primary-chip" onClick={() => createArtifact('flashcards')} disabled={!studySet || !!busy}>
+                        {busy === 'artifact' ? <Loader2 size={15} className="spin" /> : <BookmarkPlus size={15} />} Make cards
+                      </button>
+                      <button type="button" onClick={exportAnki} disabled={!flashcards.length}><Download size={15} /> Export Anki</button>
+                    </div>
+                    {flashcards.length ? (
+                      <div className="flash-study">
+                        <article className="flash-trainer">
+                          <div className="flash-trainer-top">
+                            <span>Card {activeCardIndex + 1} of {flashcards.length}</span>
+                            <strong>{studyStats.dueCards.length} due now</strong>
+                          </div>
+                          <div
+                            className={revealedCards[activeCard.id] ? 'flip-card is-flipped' : 'flip-card'}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => toggleCard(activeCard.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleCard(activeCard.id); }
+                              else if (event.key === 'ArrowRight') { event.preventDefault(); setActiveCardIndex((index) => (index + 1) % flashcards.length); }
+                              else if (event.key === 'ArrowLeft') { event.preventDefault(); setActiveCardIndex((index) => (index - 1 + flashcards.length) % flashcards.length); }
+                            }}
+                          >
+                            <div className="flip-inner">
+                              <div className="flip-face flip-front">
+                                <span className="flip-tag">Question</span>
+                                <h4>{activeCard.question}</h4>
+                                <small>Tap to flip · ← → to move</small>
+                              </div>
+                              <div className="flip-face flip-back">
+                                <span className="flip-tag">Answer</span>
+                                <p>{activeCard.answer}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="trainer-actions">
+                            <button type="button" onClick={() => setActiveCardIndex((index) => Math.max(0, index - 1))}>Previous</button>
+                            <button type="button" onClick={() => toggleCard(activeCard.id)}>{revealedCards[activeCard.id] ? 'Show question' : 'Flip card'}</button>
+                            <button type="button" onClick={() => setActiveCardIndex((index) => (index + 1) % flashcards.length)}>Next</button>
+                          </div>
+                          <div className="review-grade-bar">
+                            <button type="button" onClick={() => reviewCard(activeCard.id, 'again')}>Again</button>
+                            <button type="button" onClick={() => reviewCard(activeCard.id, 'hard')}>Hard</button>
+                            <button type="button" onClick={() => reviewCard(activeCard.id, 'good')}>Good</button>
+                            <button type="button" onClick={() => reviewCard(activeCard.id, 'easy')}>Easy</button>
+                          </div>
+                          {activeCardReview?.dueAt && (
+                            <span className="review-status">Next review: {new Date(activeCardReview.dueAt).toLocaleDateString()}</span>
+                          )}
+                        </article>
+                        <aside className="flash-stats">
+                          <div><strong>{flashcards.length}</strong><span>Total cards</span></div>
+                          <div><strong>{reviewedCount}</strong><span>Reviewed</span></div>
+                          <div><strong>{studyStats.dueCards.length}</strong><span>Due now</span></div>
+                          <button type="button" onClick={() => navigate('mastery')}>Open Progress</button>
+                        </aside>
+                      </div>
+                    ) : (
+                      <p className="muted">No flashcards yet. Tap Make cards to build a deck from your source.</p>
+                    )}
+                  </div>
+                )}
+                {practiceTab === 'quiz' && (
+                  <div className="kit-section">
+                    <div className="practice-actions">
+                      <button type="button" className="primary-chip" onClick={() => { setLastPracticeKind('quiz'); createArtifact('examinerQuestions'); }} disabled={!studySet || !!busy}>
+                        {busy === 'artifact' ? <Loader2 size={15} className="spin" /> : <FileQuestion size={15} />} Generate a quiz
+                      </button>
+                      <button type="button" onClick={startQuiz} disabled={!studySet || !!busy}>Quick oral quiz</button>
+                    </div>
+                    <p className="muted small-note">Answer in the box below. The tutor grades you and asks a follow-up.</p>
+                    {renderMessages(chat.filter((item) => item.mode === 'test'))}
+                  </div>
+                )}
+                {practiceTab === 'cases' && (
+                  <div className="kit-section">
+                    <div className="clinic-grid">
+                      {clinicTools.map((tool) => {
+                        const Icon = tool.icon;
+                        return (
+                          <article key={tool.id} className={`clinic-card${tool.featured ? ' featured' : ''}`}>
+                            <span className="clinic-ic"><Icon size={20} /></span>
+                            <div className="clinic-card-body">
+                              <strong>{tool.title}</strong>
+                              <span>{tool.desc}</span>
+                            </div>
+                            <button type="button" className="clinic-go" onClick={() => { setLastPracticeKind('cases'); createArtifact(tool.artifact); }} disabled={!studySet || !!busy}>
+                              {busy === 'artifact' ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}
+                              {tool.cta}
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                    {renderMessages(chat.filter((item) => item.mode === 'test'))}
+                  </div>
+                )}
+              </section>
+            ) : page === 'radiologyHub' ? (
+              <section className="radiology-hub">
+                <div className="rad-tabs" role="tablist">
+                  <button type="button" role="tab" className={radTab === 'cases' ? 'active' : ''} onClick={() => setRadTab('cases')}>Case library</button>
+                  <button type="button" role="tab" className={radTab === 'interpreter' ? 'active' : ''} onClick={() => setRadTab('interpreter')}>X-ray interpreter</button>
+                </div>
+                {radTab === 'cases'
+                  ? <CasesPage caseId={radCaseId} setCaseId={setRadCaseId} navigate={navigate} />
+                  : <InterpreterPage caseId={radCaseId} setCaseId={setRadCaseId} />}
+              </section>
             ) : visibleChat.length === 0 && !modes.some((modeItem) => modeItem.id === page) ? (
               <div className="empty-state">
                 <ActivePageIcon size={30} />
@@ -2975,6 +3156,7 @@ function App() {
 
           {error && <div className="error">{error}</div>}
 
+          {showComposer && (
           <form
             className="composer"
             onSubmit={(event) => {
@@ -2997,7 +3179,11 @@ function App() {
               placeholder={
                 mode === 'test'
                   ? 'Answer a quiz question, ask for a harder case, or say "test me on caries"...'
-                  : 'Ask about caries, mental foramen landmarks, enamel formation, cavity classes...'
+                  : mode === 'summary'
+                    ? 'Ask for a summary, or type a topic to summarize...'
+                    : mode === 'explanation'
+                      ? 'Ask the tutor to explain a topic in depth...'
+                      : 'Ask about caries, mental foramen landmarks, enamel formation, cavity classes...'
               }
               rows={2}
               disabled={!studySet}
@@ -3006,6 +3192,7 @@ function App() {
               {busy ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
             </button>
           </form>
+          )}
         </section>
       </section>
     </main>
