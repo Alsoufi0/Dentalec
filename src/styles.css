@@ -2184,7 +2184,7 @@ textarea:focus {
 
 .command-layout {
   display: grid;
-  grid-template-columns: minmax(460px, 1.05fr) minmax(540px, 1fr);
+  grid-template-columns: minmax(300px, 1fr) minmax(320px, 1fr);
   gap: 16px;
 }
 
@@ -3257,7 +3257,7 @@ textarea:focus {
   }
 }
 
-@media (max-width: 1380px) {
+@media (max-width: 1500px) {
   .command-layout,
   .command-lower,
   .command-bottom {

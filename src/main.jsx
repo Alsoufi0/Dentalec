@@ -69,7 +69,7 @@ const pages = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, hint: 'overview', prompt: 'Your study hub: progress, next actions, and current source set.' },
   { id: 'library', label: 'Library', icon: Upload, hint: 'sources', prompt: 'Upload PDFs or index pasted dental notes, rubrics, protocols, and handouts.' },
   ...modes,
-  { id: 'mastery', label: 'Mastery', icon: CheckCircle2, hint: 'adaptive', prompt: 'Track readiness, spaced review, curriculum progress, and weak-spot remediation.' },
+  { id: 'mastery', label: 'Progress', icon: CheckCircle2, hint: 'your activity', prompt: 'Your real study activity: questions asked, flashcards made, and cards due for review.' },
   { id: 'engines', label: 'Study Tools', icon: Brain, hint: 'from your notes', prompt: 'Turn your uploaded source into focused study outputs: gap checks, differentials, protocols, cases, visuals, mnemonics, and more.' },
   { id: 'clinic', label: 'Clinical Cases', icon: Stethoscope, hint: 'practice', prompt: 'Generate patient cases, OSCE stations, and exam checklists from your uploaded source.' },
   { id: 'cases', label: 'Case Library', icon: Layers, hint: 'x-ray cases', prompt: 'Browse and filter teaching radiographs, then open one in the viewer.' },
@@ -89,7 +89,7 @@ const sidebarItems = [
   { page: 'test', label: 'Exams', icon: FileQuestion, hint: 'oral practice' },
   { page: 'cases', label: 'Radiology', icon: Activity, hint: 'x-ray cases' },
   { page: 'interpreter', label: 'X-ray Interpreter', icon: ScanSearch, hint: 'AI feedback' },
-  { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'mastery maps' },
+  { page: 'mastery', label: 'Progress', icon: LineChart, hint: 'your activity' },
   { page: 'summary', label: 'Summary', icon: FileText, hint: 'recaps' }
 ];
 
@@ -109,33 +109,6 @@ const voicePersonas = [
   { id: 'peer', label: 'Supportive Peer', voice: 'cedar' },
   { id: 'professor', label: 'Stern Professor', voice: 'cedar' },
   { id: 'clinic', label: 'Clinical Mentor', voice: 'cedar' }
-];
-
-const topicKeywords = [
-  { topic: 'Dental Caries', terms: ['caries', 'decay', 'demineralization', 'plaque', 'enamel', 'dentin'] },
-  { topic: 'Endodontics', terms: ['pulp', 'root canal', 'periapical', 'apex', 'endodontic'] },
-  { topic: 'Periodontics', terms: ['periodontal', 'gingiva', 'pocket', 'calculus', 'attachment'] },
-  { topic: 'Anatomy', terms: ['nerve', 'foramen', 'mandibular', 'maxillary', 'cranial', 'canal'] },
-  { topic: 'Pharmacology', terms: ['drug', 'anesthetic', 'antibiotic', 'dose', 'contraindication'] },
-  { topic: 'Radiology', terms: ['radiograph', 'x-ray', 'radiolucent', 'radiopaque', 'cbct'] }
-];
-
-const curriculumTracks = [
-  {
-    name: 'Foundations',
-    domains: ['Anatomy', 'Dental Caries', 'Radiology'],
-    goal: 'Build the map of tooth structure, landmarks, and disease language.'
-  },
-  {
-    name: 'Clinical Reasoning',
-    domains: ['Endodontics', 'Periodontics', 'Pharmacology'],
-    goal: 'Connect symptoms, findings, mechanisms, and safe next questions.'
-  },
-  {
-    name: 'Performance',
-    domains: ['Dental Caries', 'Endodontics', 'Periodontics'],
-    goal: 'Convert knowledge into OSCE answers, chairside checklists, and teach-back.'
-  }
 ];
 
 const dentalosEngines = [
@@ -338,18 +311,25 @@ function lineIsHeading(line, mode) {
 
 // Renders one parsed block (table, flow map, numbered/bullet row, heading, or
 // paragraph). Shared by the flat and the collapsible-section layouts.
+function isRuleLine(line) {
+  return /^\s*([-*_=])\1{2,}\s*$/.test(line);
+}
+
 function RenderBlock({ block, mode }) {
   if (block.type === 'table') return <ResponseTable lines={block.lines} />;
 
   const line = block.line;
+  // Horizontal-rule / separator lines (---, ***, ___, ===) are noise here.
+  if (isRuleLine(line)) return null;
   const heading = line.replace(/^#{1,6}\s*/, '');
   const numbered = heading.match(/^(\d+)\.\s+(.*)/);
   const bullet = heading.match(/^[-*]\s+(.*)/);
 
-  // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map.
+  // Turn ASCII arrow chains (A -> B -> C) into a real visual flow map. Handle
+  // long chains too so they never fall back to raw "A -> B ->" text.
   const flowSource = bullet ? bullet[1] : numbered ? numbered[2] : heading;
   const flowNodes = flowSource.split(/\s*(?:->|=>|→)\s*/).map((node) => node.trim()).filter(Boolean);
-  if (flowNodes.length >= 2 && flowNodes.length <= 8 && /(?:->|=>|→)/.test(flowSource) && flowSource.length <= 240) {
+  if (flowNodes.length >= 2 && flowNodes.length <= 12 && /(?:->|=>|→)/.test(flowSource)) {
     // A proper connected step map (a stepper with a connecting rail), not text arrows.
     return (
       <div className="vmap">
@@ -379,7 +359,9 @@ function RenderBlock({ block, mode }) {
 function sectionPreview(blocks) {
   for (const block of blocks) {
     if (block.type !== 'line') continue;
-    const text = stripMarkdown(block.line).trim();
+    if (isRuleLine(block.line)) continue;
+    // Render arrow chains as readable "A to B to C" instead of raw "->".
+    const text = stripMarkdown(block.line).replace(/\s*(?:->|=>|→)\s*/g, ' → ').trim();
     if (text) return text.length > 140 ? `${text.slice(0, 140).trim()}...` : text;
   }
   if (blocks.some((block) => block.type === 'table')) return 'Includes a comparison table.';
@@ -776,15 +758,6 @@ const topicTabs = [
 
 const explanationLevels = ['Simple', 'Student', 'Textbook', 'Clinical', 'Examiner', 'Board', 'Expert'];
 
-function RingProgress({ value, label, className = '' }) {
-  return (
-    <div className={`ring-progress ${className}`} style={{ '--value': value }}>
-      <strong>{value}%</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 // Interactive anatomical cross-section. Each tissue is its own SVG path so the
 // selected layer glows, neighbours dim, and clicking a layer drives the lesson.
 function InteractiveTooth({ selected, onSelect }) {
@@ -831,79 +804,42 @@ function InteractiveTooth({ selected, onSelect }) {
   );
 }
 
-// Dependency-free SVG radar of per-topic mastery so progress reads as a graph,
-// not just a row of meters.
-function MasteryRadar({ domains }) {
-  const items = (domains || []).slice(0, 6);
-  if (items.length < 3) return null;
-  const count = items.length;
-  const cx = 110;
-  const cy = 110;
-  const radius = 80;
-  const angleFor = (index) => (Math.PI * 2 * index) / count - Math.PI / 2;
-  const pointAt = (index, distance) => [
-    cx + Math.cos(angleFor(index)) * distance,
-    cy + Math.sin(angleFor(index)) * distance
-  ];
-  const rings = [0.25, 0.5, 0.75, 1];
-  const valuePoints = items
-    .map((domain, index) => pointAt(index, radius * Math.max(0.08, Math.min(1, domain.score / 100))).join(','))
-    .join(' ');
+const howToSteps = [
+  { icon: Upload, title: 'Add your material', text: 'Open Notes & Books, then upload a PDF or paste your lecture notes. You can keep several sources.' },
+  { icon: Library, title: 'Pick what to study', text: 'Each source keeps its own tutor chat, flashcards, and notes. Switch the active source anytime in Notes & Books.' },
+  { icon: Sparkles, title: 'Study your way', text: 'Ask the AI Tutor, generate a Summary, make Flashcards, or take an Exam. Everything comes from your active source.' },
+  { icon: BookmarkPlus, title: 'Review and remember', text: 'Grade your flashcards. Cards you find hard come back sooner, tracked on the Progress page.' }
+];
 
+function HowToUse({ navigate, compact = false }) {
   return (
-    <svg className="radar-chart" viewBox="0 0 220 220" role="img" aria-label="Mastery radar by topic">
-      {rings.map((ring, ringIndex) => (
-        <polygon
-          key={ring}
-          className={ringIndex === rings.length - 1 ? 'radar-ring radar-ring-edge' : 'radar-ring'}
-          points={items.map((_, index) => pointAt(index, radius * ring).join(',')).join(' ')}
-        />
-      ))}
-      {items.map((_, index) => {
-        const [x, y] = pointAt(index, radius);
-        return <line key={`spoke-${index}`} className="radar-spoke" x1={cx} y1={cy} x2={x} y2={y} />;
-      })}
-      <polygon className="radar-area" points={valuePoints} />
-      {items.map((domain, index) => {
-        const [x, y] = pointAt(index, radius * Math.max(0.08, Math.min(1, domain.score / 100)));
-        return <circle key={`dot-${domain.topic}`} className="radar-dot" cx={x} cy={y} r="3.4" />;
-      })}
-      {items.map((domain, index) => {
-        const [lx, ly] = pointAt(index, radius + 20);
-        const anchor = lx > cx + 6 ? 'start' : lx < cx - 6 ? 'end' : 'middle';
-        return (
-          <text key={`label-${domain.topic}`} className="radar-label" x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle">
-            {domain.topic.split(' ')[0]}
-          </text>
-        );
-      })}
-    </svg>
-  );
-}
-
-function SourceIntakePanel({ selectedSubject, setSelectedSubject, selectedIntent, navigate }) {
-  return (
-    <article className="source-intake glass-panel">
-      <div className="panel-title">
+    <article className={compact ? 'how-to compact glass-panel' : 'how-to glass-panel'}>
+      <div className="how-to-head">
         <div>
-          <strong>Build your study source first</strong>
-          <span>DentalOS should not invent cases, MCQs, or protocols before you choose material.</span>
+          <strong>How to use Simav Dental Tutor</strong>
+          <span>A grounded study tool: it only answers from the material you add, so it will not invent facts.</span>
         </div>
       </div>
-      <div className="subject-picker">
-        {dentalSubjects.map((subject) => (
-          <button key={subject} type="button" className={selectedSubject === subject ? 'active' : ''} onClick={() => setSelectedSubject(subject)}>
-            {subject}
-          </button>
-        ))}
-      </div>
-      <div className="intake-brief">
-        <strong>{selectedSubject ? `Selected path: ${selectedSubject}` : 'Select a subject or ask the AI to help choose'}</strong>
-        <p>{selectedIntent || 'Choose a study mode above, then upload a PDF or paste lecture notes. The AI will build from your real source instead of a placeholder.'}</p>
-        <div>
-          <button type="button" className="primary-chip" onClick={() => navigate('library')}>Upload or paste source</button>
-          <button type="button" onClick={() => navigate('answer')}>Ask what to upload</button>
-        </div>
+      <ol className="how-to-steps">
+        {howToSteps.map((step, index) => {
+          const Icon = step.icon;
+          return (
+            <li key={step.title}>
+              <span className="how-to-num">{index + 1}</span>
+              <span className="how-to-ic"><Icon size={18} /></span>
+              <span className="how-to-body">
+                <strong>{step.title}</strong>
+                <small>{step.text}</small>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="how-to-foot">
+        <p>Tip: turn on the Study buddy in the sidebar to ask questions by voice.</p>
+        <button type="button" className="primary-chip" onClick={() => navigate('library')}>
+          <Upload size={16} /> Add your first source
+        </button>
       </div>
     </article>
   );
@@ -968,7 +904,7 @@ function parseLatestMcq(chat = []) {
   return null;
 }
 
-function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet, busy, navigate, createArtifact, submitStudy }) {
+function CommandCenterDashboard({ user, studyStats, flashcards, chat, studySet, busy, navigate, createArtifact, submitStudy }) {
   const [selectedStructure, setSelectedStructure] = useState('dentin');
   const [selectedTab, setSelectedTab] = useState('overview');
   const [learningLevel, setLearningLevel] = useState(4);
@@ -997,36 +933,17 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
     ['Reason safely', 'Build a differential diagnosis table with distinguishing clinical, radiographic, and histologic features where relevant.'],
     ['Plan and debrief', 'Create an educational treatment plan with indications, contraindications, materials, errors, complications, prognosis, and follow-up.']
   ];
-  const weakAreas = masteryModel.domains.slice(0, 4).map((domain, index) => ({
-    label: domain.topic,
-    score: Math.max(34, Math.min(78, 100 - domain.score + index * 8))
-  }));
-  const topSubjects = masteryModel.domains.slice(0, 5).map((domain, index) => ({
-    label: domain.topic,
-    score: Math.max(58, Math.min(92, domain.score + 12 - index * 4))
-  }));
-  const weakAverage = Math.round(weakAreas.reduce((total, area) => total + area.score, 0) / Math.max(1, weakAreas.length));
   const activityMetrics = [
-    { label: 'Questions', value: chat.filter((item) => item.role === 'user').length },
-    { label: 'Answers', value: chat.filter((item) => item.role === 'assistant').length },
-    { label: 'Cards', value: flashcards.length },
-    { label: 'Due', value: masteryModel.dueCards.length }
+    { label: 'Questions asked', value: studyStats.questions },
+    { label: 'Answers', value: studyStats.answers },
+    { label: 'Flashcards', value: studyStats.total },
+    { label: 'Due to review', value: studyStats.dueCards.length }
   ];
-  const activityPeak = Math.max(1, ...activityMetrics.map((metric) => metric.value));
   const hasActivity = activityMetrics.some((metric) => metric.value > 0);
 
   function runAction(action) {
-    setSelectedIntent(`${action.title}: ${action.prompt}`);
-    if (!hasSource) return;
-    if (!selectedSubject && action.artifact) {
-      submitStudy(`Before creating ${action.title}, inspect my active source and ask me to choose a focus area. Offer 3 useful dental focus options with one sentence explaining why each would be high-yield.`);
-      navigate('answer');
-      return;
-    }
-    if (action.page) {
-      navigate(action.page);
-      return;
-    }
+    if (!hasSource) { navigate('library'); return; }
+    if (action.page) { navigate(action.page); return; }
     if (action.artifact) createArtifact(action.artifact);
   }
 
@@ -1045,10 +962,10 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
             }}
           />
         </label>
-        {hasSource && masteryModel.dueCards.length > 0 && (
+        {hasSource && studyStats.dueCards.length > 0 && (
           <button type="button" className="topbar-due" onClick={() => navigate('mastery')}>
             <Bell size={16} />
-            {masteryModel.dueCards.length} due
+            {studyStats.dueCards.length} due
           </button>
         )}
       </div>
@@ -1064,14 +981,7 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
         </button>
       </div>
 
-      {!hasSource && (
-        <SourceIntakePanel
-          selectedSubject={selectedSubject}
-          setSelectedSubject={setSelectedSubject}
-          selectedIntent={selectedIntent}
-          navigate={navigate}
-        />
-      )}
+      {!hasSource && <HowToUse navigate={navigate} />}
 
       {hasSource && (
         <div className="active-source-strip">
@@ -1119,37 +1029,27 @@ function CommandCenterDashboard({ user, masteryModel, flashcards, chat, studySet
 
         <div className="analytics-panel stacked glass-panel">
             <div className="panel-title">
-              <strong>Your Progress</strong>
-              <button type="button" className="panel-link" onClick={() => navigate('mastery')}>View all</button>
+              <strong>Your activity on this source</strong>
+              <button type="button" className="panel-link" onClick={() => navigate('mastery')}>Open Progress</button>
             </div>
-            <RingProgress value={Math.max(12, masteryModel.average)} label="Overall progress" />
-            <div className="trend-card">
-              <strong>This study set</strong>
-              {hasActivity ? (
-                <>
-                  <div className="trend-bars">
-                    {activityMetrics.map((metric) => (
-                      <i
-                        key={metric.label}
-                        style={{ height: `${Math.max(6, Math.round((metric.value / activityPeak) * 100))}%` }}
-                        title={`${metric.label}: ${metric.value}`}
-                      />
-                    ))}
+            {hasActivity ? (
+              <div className="stat-tiles">
+                {activityMetrics.map((metric) => (
+                  <div className="stat-tile" key={metric.label}>
+                    <strong>{metric.value}</strong>
+                    <span>{metric.label}</span>
                   </div>
-                  <div className="trend-labels">
-                    {activityMetrics.map((metric) => (
-                      <span key={metric.label}>{metric.label} {metric.value}</span>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="trend-empty">Ask questions and build cards to see your activity here.</p>
-              )}
-            </div>
-            <div className="radar-card">
-              <strong>Topic mastery map</strong>
-              <MasteryRadar domains={masteryModel.domains} />
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="trend-empty">Ask the tutor a question and build some flashcards. Your real activity shows up here.</p>
+            )}
+            {studyStats.dueCards.length > 0 && (
+              <button type="button" className="review-cta" onClick={() => navigate('mastery')}>
+                <BookmarkPlus size={16} />
+                Review {studyStats.dueCards.length} card{studyStats.dueCards.length > 1 ? 's' : ''} due now
+              </button>
+            )}
         </div>
       </div>}
 
@@ -1300,48 +1200,20 @@ function App() {
     const questions = chat.filter((item) => item.role === 'user').length;
     return { answers, questions, cards: flashcards.length };
   }, [chat, flashcards.length]);
-  const topicHeatmap = useMemo(() => {
-    const corpus = chat.map((item) => item.text).join(' ').toLowerCase();
-    return topicKeywords.map((item) => {
-      const mentions = item.terms.reduce((count, term) => count + (corpus.match(new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'g'))?.length || 0), 0);
-      const testMentions = chat
-        .filter((entry) => entry.mode === 'test')
-        .map((entry) => entry.text.toLowerCase())
-        .join(' ');
-      const weakSignals = item.terms.reduce((count, term) => count + (testMentions.match(new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'g'))?.length || 0), 0);
-      const strength = Math.max(8, Math.min(96, mentions * 16 - weakSignals * 5 + (flashcards.length ? 10 : 0)));
-      return { ...item, mentions, strength };
-    });
-  }, [chat, flashcards.length]);
-  const masteryModel = useMemo(() => {
+  // Honest study stats from real actions only: sources, flashcards, spaced
+  // repetition reviews, and questions asked. No invented mastery percentages.
+  const studyStats = useMemo(() => {
     const now = Date.now();
     const dueCards = flashcards.filter((card) => {
       const review = learning.reviews?.[card.id];
       return !review?.dueAt || new Date(review.dueAt).getTime() <= now;
     });
-    const domains = topicHeatmap.map((topic) => {
-      const relatedCards = flashcards.filter((card) => {
-        const text = `${card.question} ${card.answer}`.toLowerCase();
-        return topic.terms.some((term) => text.includes(term));
-      }).length;
-      const reviewed = flashcards.filter((card) => {
-        const text = `${card.question} ${card.answer}`.toLowerCase();
-        return learning.reviews?.[card.id] && topic.terms.some((term) => text.includes(term));
-      }).length;
-      const confidence = learning.confidence?.[topic.topic] || 0;
-      const score = Math.max(5, Math.min(100, topic.strength + relatedCards * 4 + reviewed * 8 + confidence * 8));
-      return { ...topic, relatedCards, reviewed, confidence, score };
-    });
-    const average = Math.round(domains.reduce((total, item) => total + item.score, 0) / Math.max(1, domains.length));
-    const weakest = [...domains].sort((a, b) => a.score - b.score).slice(0, 2);
-    const tracks = curriculumTracks.map((track) => {
-      const trackDomains = domains.filter((domain) => track.domains.includes(domain.topic));
-      const readiness = Math.round(trackDomains.reduce((total, item) => total + item.score, 0) / Math.max(1, trackDomains.length));
-      return { ...track, readiness };
-    });
-    return { average, domains, dueCards, weakest, tracks };
-  }, [flashcards, learning, topicHeatmap]);
-  const reviewedCount = flashcards.filter((card) => learning.reviews?.[card.id]).length;
+    const reviewed = flashcards.filter((card) => learning.reviews?.[card.id]).length;
+    const questions = chat.filter((item) => item.role === 'user').length;
+    const answers = chat.filter((item) => item.role === 'assistant').length;
+    return { dueCards, reviewed, total: flashcards.length, questions, answers };
+  }, [flashcards, learning, chat]);
+  const reviewedCount = studyStats.reviewed;
   const activeCard = flashcards[Math.min(activeCardIndex, Math.max(0, flashcards.length - 1))];
   const activeCardReview = activeCard ? learning.reviews?.[activeCard.id] : null;
 
@@ -1896,16 +1768,6 @@ function App() {
     }));
     setRevealedCards((items) => ({ ...items, [cardId]: true }));
     setActiveCardIndex((index) => (flashcards.length ? (index + 1) % flashcards.length : 0));
-  }
-
-  function markConfidence(topic, direction) {
-    setLearning((state) => ({
-      ...state,
-      confidence: {
-        ...(state.confidence || {}),
-        [topic]: Math.max(-3, Math.min(3, (state.confidence?.[topic] || 0) + direction))
-      }
-    }));
   }
 
   function bumpUsage(field, amount = 1) {
@@ -2549,44 +2411,20 @@ function App() {
             })}
           </nav>
 
-          <div className="system-card" aria-label="DentalOS system status">
-            <div className="system-card-header">
-              <span>
-                <Sparkles size={17} />
-              </span>
-              <div>
-                <strong>DentalOS Core</strong>
-                <small>Learning engine status</small>
+          {sources.length > 0 && (
+            <div className="study-snapshot" aria-label="Study snapshot">
+              <div className="study-snapshot-head">
+                <Sparkles size={16} />
+                <strong>Study snapshot</strong>
               </div>
+              <div className="snapshot-row"><span>Flashcards</span><strong>{studyStats.total}</strong></div>
+              <div className="snapshot-row"><span>Reviewed</span><strong>{reviewedCount}</strong></div>
+              <div className="snapshot-row"><span>Due now</span><strong>{studyStats.dueCards.length}</strong></div>
+              {studyStats.dueCards.length > 0 && (
+                <button type="button" className="snapshot-cta" onClick={() => navigate('mastery')}>Review due cards</button>
+              )}
             </div>
-            <div className="system-meter">
-              <div>
-                <span>Readiness</span>
-                <strong>{masteryModel.average}%</strong>
-              </div>
-              <meter min="0" max="100" value={masteryModel.average}>
-                {masteryModel.average}%
-              </meter>
-            </div>
-            <div className="system-chips">
-              <span>
-                <CheckCircle2 size={14} />
-                Source grounded
-              </span>
-              <span>
-                <LayoutDashboard size={14} />
-                Tables + charts
-              </span>
-              <span>
-                <Brain size={14} />
-                Adaptive memory
-              </span>
-              <span>
-                <FileText size={14} />
-                Review required
-              </span>
-            </div>
-          </div>
+          )}
         </aside>
 
         <section className={page === 'dashboard' ? 'chat-panel command-mode' : 'chat-panel'}>
@@ -2642,7 +2480,7 @@ function App() {
               <section className="dashboard-page">
                 <CommandCenterDashboard
                   user={auth.user}
-                  masteryModel={masteryModel}
+                  studyStats={studyStats}
                   flashcards={flashcards}
                   chat={chat}
                   studySet={studySet}
@@ -2821,49 +2659,31 @@ function App() {
               </section>
             ) : page === 'mastery' ? (
               <section className="mastery-page">
-                <div className="mastery-hero">
-                  <div>
-                    <p>Your progress</p>
-                    <h3>{masteryModel.average}% readiness</h3>
-                    <span>{masteryModel.weakest.length ? `${masteryModel.weakest.map((item) => item.topic).join(' and ')} are least covered right now.` : 'Study and review to start building your readiness map.'}</span>
-                    <button type="button" onClick={() => createArtifact('adaptivePlan')} disabled={!studySet || !!busy}>
-                      Build rescue plan
-                    </button>
-                  </div>
-                  <div className="mastery-hero-radar">
-                    <MasteryRadar domains={masteryModel.domains} />
-                  </div>
+                <div className="engines-hero-bar">
+                  <p>Progress</p>
+                  <h3>Your study activity for {activeSource ? activeSource.title : 'this source'}</h3>
+                  <small>These numbers come from what you actually do: questions asked, flashcards made, and cards reviewed.</small>
                 </div>
                 {!studySet && (
                   <div className="engines-need-source">
-                    <span>Add a study source and review some flashcards to start tracking your progress.</span>
+                    <span>Add a study source and build some flashcards to start tracking your progress.</span>
                     <button type="button" onClick={() => navigate('library')}>Add a source</button>
                   </div>
                 )}
-                <div className="mastery-grid">
-                  {masteryModel.domains.map((domain) => (
-                    <article key={domain.topic} className="mastery-card">
-                      <div>
-                        <strong>{domain.topic}</strong>
-                        <span>{domain.relatedCards || domain.reviewed ? `${domain.relatedCards} related cards, ${domain.reviewed} reviewed` : 'Not started yet'}</span>
-                      </div>
-                      <meter min="0" max="100" value={domain.score}></meter>
-                      <div className="confidence-row">
-                        <button type="button" onClick={() => markConfidence(domain.topic, -1)}>Weak</button>
-                        <span>Confidence {domain.confidence}</span>
-                        <button type="button" onClick={() => markConfidence(domain.topic, 1)}>Strong</button>
-                      </div>
-                    </article>
-                  ))}
+                <div className="stat-tiles wide">
+                  <div className="stat-tile"><strong>{studyStats.questions}</strong><span>Questions asked</span></div>
+                  <div className="stat-tile"><strong>{studyStats.total}</strong><span>Flashcards made</span></div>
+                  <div className="stat-tile"><strong>{studyStats.reviewed}</strong><span>Cards reviewed</span></div>
+                  <div className="stat-tile"><strong>{studyStats.dueCards.length}</strong><span>Due to review</span></div>
                 </div>
                 <div className="kit-section">
                   <div className="section-title">
                     <BookmarkPlus size={18} />
-                    <h3>Due Review</h3>
+                    <h3>Cards to review now</h3>
                   </div>
-                  {masteryModel.dueCards.length ? (
+                  {studyStats.dueCards.length ? (
                     <div className="review-list">
-                      {masteryModel.dueCards.slice(0, 6).map((card) => (
+                      {studyStats.dueCards.slice(0, 10).map((card) => (
                         <article key={card.id}>
                           <strong>{card.question}</strong>
                           <span>{card.answer}</span>
@@ -2877,27 +2697,13 @@ function App() {
                       ))}
                     </div>
                   ) : (
-                    <p className="muted">No cards are due. Generate flashcards or keep studying to grow the review queue.</p>
+                    <p className="muted">Nothing is due right now. {studyStats.total ? 'Nice work, come back later.' : 'Make some flashcards to start a review schedule.'}</p>
                   )}
-                </div>
-                <div className="kit-section">
-                  <div className="section-title">
-                    <Brain size={18} />
-                    <h3>Curriculum Tracks</h3>
-                  </div>
-                  <div className="track-grid">
-                    {masteryModel.tracks.map((track) => (
-                      <article key={track.name}>
-                        <strong>{track.name}</strong>
-                        <meter min="0" max="100" value={track.readiness}></meter>
-                        <span>{track.readiness}% ready</span>
-                        <p>{track.goal}</p>
-                      </article>
-                    ))}
-                  </div>
-                  <button type="button" onClick={() => createArtifact('curriculumMap')} disabled={!studySet || !!busy}>
-                    Generate curriculum map from source
-                  </button>
+                  {studySet && (
+                    <button type="button" className="kit-inline-cta" onClick={() => createArtifact('flashcards')} disabled={!!busy}>
+                      <BookmarkPlus size={16} /> Make more flashcards
+                    </button>
+                  )}
                 </div>
               </section>
             ) : page === 'engines' ? (
@@ -3016,7 +2822,7 @@ function App() {
                       <article className="flash-trainer">
                         <div className="flash-trainer-top">
                           <span>Card {activeCardIndex + 1} of {flashcards.length}</span>
-                          <strong>{masteryModel.dueCards.length} due now</strong>
+                          <strong>{studyStats.dueCards.length} due now</strong>
                         </div>
                         <div
                           className={revealedCards[activeCard.id] ? 'flip-card is-flipped' : 'flip-card'}
@@ -3075,7 +2881,7 @@ function App() {
                           <span>Reviewed</span>
                         </div>
                         <div>
-                          <strong>{masteryModel.dueCards.length}</strong>
+                          <strong>{studyStats.dueCards.length}</strong>
                           <span>Due now</span>
                         </div>
                         <button type="button" onClick={exportAnki}>Export Anki TSV</button>

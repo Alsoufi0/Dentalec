@@ -488,3 +488,57 @@
   :root[data-theme="dark"] .source-info strong { white-space: normal; }
   :root[data-theme="dark"] .sec-preview { padding-left: 14px; }
 }
+
+/* Fit on normal laptops without needing to zoom out: gently scale the whole
+   rem-based UI down on smaller viewports instead of forcing a fixed size. */
+@media (max-width: 1500px) { :root { font-size: 15px; } }
+@media (max-width: 1180px) { :root { font-size: 14px; } }
+
+/* Onboarding: How to use */
+:root[data-theme="dark"] .how-to { padding: 20px; border-radius: 16px; }
+:root[data-theme="dark"] .how-to-head strong { display: block; font-size: 1.05rem; color: var(--c-text, #e8eef9); }
+:root[data-theme="dark"] .how-to-head span { display: block; color: var(--c-muted, #8794ab); font-size: 0.86rem; margin-top: 4px; line-height: 1.5; }
+:root[data-theme="dark"] .how-to-steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+:root[data-theme="dark"] .how-to-steps li {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: start; gap: 10px;
+  padding: 12px 14px; border: 1px solid var(--c-line, #232c3d); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+}
+:root[data-theme="dark"] .how-to-num { width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; font-size: 0.76rem; font-weight: 800; background: linear-gradient(135deg,#3ee0cd,#5b8bff); color: #04130f; }
+:root[data-theme="dark"] .how-to-ic { color: #6fe7da; padding-top: 1px; }
+:root[data-theme="dark"] .how-to-body strong { display: block; font-size: 0.9rem; color: var(--c-text, #e8eef9); }
+:root[data-theme="dark"] .how-to-body small { display: block; color: var(--c-muted, #8794ab); font-size: 0.8rem; line-height: 1.5; margin-top: 2px; }
+:root[data-theme="dark"] .how-to-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+:root[data-theme="dark"] .how-to-foot p { color: var(--c-muted, #8794ab); font-size: 0.82rem; margin: 0; }
+:root[data-theme="dark"] .how-to-foot .primary-chip { display: inline-flex; align-items: center; gap: 7px; }
+
+/* Honest stat tiles (dashboard + progress) */
+:root[data-theme="dark"] .stat-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+:root[data-theme="dark"] .stat-tiles.wide { grid-template-columns: repeat(4, 1fr); }
+:root[data-theme="dark"] .stat-tile {
+  border: 1px solid var(--c-line, #232c3d); border-radius: 12px; padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--c-panel, #111722);
+}
+:root[data-theme="dark"] .stat-tile strong { display: block; font-size: 1.6rem; font-weight: 800; color: var(--c-text, #e8eef9); line-height: 1.1; }
+:root[data-theme="dark"] .stat-tile span { display: block; color: var(--c-muted, #8794ab); font-size: 0.78rem; margin-top: 3px; }
+:root[data-theme="dark"] .review-cta, :root[data-theme="dark"] .kit-inline-cta {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 14px;
+  border: 0; border-radius: 11px; background: linear-gradient(180deg,#3ee0cd,#25b6a6); color: #04130f;
+  font-weight: 700; font-size: 0.84rem; cursor: pointer;
+}
+:root[data-theme="dark"] .review-cta:hover, :root[data-theme="dark"] .kit-inline-cta:hover { filter: brightness(1.05); }
+:root[data-theme="dark"] .kit-inline-cta:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Sidebar study snapshot (replaces the fake readiness meter) */
+:root[data-theme="dark"] .study-snapshot { border: 1px solid var(--c-line, #232c3d); border-radius: 14px; padding: 14px; background: var(--c-panel, #111722); }
+:root[data-theme="dark"] .study-snapshot-head { display: flex; align-items: center; gap: 8px; color: #6fe7da; margin-bottom: 10px; }
+:root[data-theme="dark"] .study-snapshot-head strong { color: var(--c-text, #e8eef9); font-size: 0.9rem; }
+:root[data-theme="dark"] .snapshot-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 0.84rem; color: var(--c-muted, #8794ab); }
+:root[data-theme="dark"] .snapshot-row strong { color: var(--c-text, #e8eef9); font-size: 0.95rem; }
+:root[data-theme="dark"] .snapshot-cta { width: 100%; margin-top: 10px; padding: 8px; border: 1px solid var(--c-line-2, #2e3950); border-radius: 10px; background: var(--c-bg, #0a0e14); color: var(--c-text, #e8eef9); font-weight: 700; font-size: 0.8rem; cursor: pointer; }
+:root[data-theme="dark"] .snapshot-cta:hover { border-color: var(--c-accent, #36d6c3); }
+
+@media (max-width: 620px) {
+  :root[data-theme="dark"] .how-to-steps { grid-template-columns: 1fr; }
+  :root[data-theme="dark"] .stat-tiles.wide { grid-template-columns: repeat(2, 1fr); }
+}
