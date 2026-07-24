@@ -1248,18 +1248,33 @@ function App() {
     setActiveSourceId(id || null);
   }
 
-  function updateActiveSourceData(field, next, transform) {
+  function updateSourceData(key, field, next, transform) {
     setSourceData((data) => {
-      const key = activeKeyRef.current;
       const current = data[key] || emptySourceData();
       const raw = typeof next === 'function' ? next(current[field]) : next;
       return { ...data, [key]: { ...current, [field]: transform ? transform(raw) : raw } };
     });
   }
 
-  const setChat = (next) => updateActiveSourceData('chat', next, (value) => (Array.isArray(value) ? value.slice(-MAX_CHAT) : []));
-  const setFlashcards = (next) => updateActiveSourceData('flashcards', next, (value) => (Array.isArray(value) ? value.slice(0, 300) : []));
-  const setNotes = (next) => updateActiveSourceData('notes', next, (value) => String(value || ''));
+  const sliceChat = (value) => (Array.isArray(value) ? value.slice(-MAX_CHAT) : []);
+  const sliceCards = (value) => (Array.isArray(value) ? value.slice(0, 300) : []);
+  const asNotes = (value) => String(value || '');
+
+  // Writes to whichever source is active right now. For async handlers that
+  // span an await, bind to the source captured at call time instead (see
+  // sourceWriters) so a result never lands in a source the student switched to
+  // mid-generation.
+  const setChat = (next) => updateSourceData(activeKeyRef.current, 'chat', next, sliceChat);
+  const setFlashcards = (next) => updateSourceData(activeKeyRef.current, 'flashcards', next, sliceCards);
+  const setNotes = (next) => updateSourceData(activeKeyRef.current, 'notes', next, asNotes);
+
+  function sourceWriters(key) {
+    return {
+      setChat: (next) => updateSourceData(key, 'chat', next, sliceChat),
+      setFlashcards: (next) => updateSourceData(key, 'flashcards', next, sliceCards),
+      setNotes: (next) => updateSourceData(key, 'notes', next, asNotes)
+    };
+  }
 
   const fileNames = useMemo(() => studySet?.files?.map((file) => file.originalName).join(', '), [studySet]);
   const sourceKind = useMemo(() => {
@@ -2006,6 +2021,11 @@ function App() {
   async function createArtifact(type, source = '') {
     if (!studySet?.vectorStoreId) return;
 
+    // Bind writes to the source generated from, not whichever is active when
+    // the (slow) call returns.
+    const key = activeSourceId || 'unassigned';
+    const writer = sourceWriters(key);
+    const cardsAtCall = flashcards;
     stopSpeech(false);
     busyRef.current = 'artifact';
     setBusy('artifact');
@@ -2037,19 +2057,19 @@ function App() {
           : parseFlashcards(data.text);
         // Drop any card whose question already exists, so asking for more never
         // shows the student duplicates even if the model repeats itself.
-        const seen = new Set(flashcards.map((card) => card.question.toLowerCase().trim()));
+        const seen = new Set(cardsAtCall.map((card) => card.question.toLowerCase().trim()));
         const cards = parsed.filter((card) => {
-          const key = card.question.toLowerCase().trim();
-          if (seen.has(key)) return false;
-          seen.add(key);
+          const q = card.question.toLowerCase().trim();
+          if (seen.has(q)) return false;
+          seen.add(q);
           return true;
         });
-        setFlashcards((items) => [...cards, ...items]);
+        writer.setFlashcards((items) => [...cards, ...items]);
         setActiveCardIndex(0);
         setRevealedCards({});
         setPage('kit');
         const skipped = parsed.length - cards.length;
-        setChat((items) => [
+        writer.setChat((items) => [
           ...items,
           {
             role: 'assistant',
@@ -2068,7 +2088,7 @@ function App() {
       const testArtifacts = ['weakQuiz', 'caseStudy', 'osce', 'examinerQuestions', 'clinicalCase'];
       const kitArtifacts = ['notes', 'adaptivePlan', 'curriculumMap', 'clinicalVisionChecklist', 'mnemonics', 'memoryPlan'];
       if (kitArtifacts.includes(type)) {
-        setNotes(data.text);
+        writer.setNotes(data.text);
         setPage('kit');
       }
       if (testArtifacts.includes(type)) {
@@ -2080,7 +2100,7 @@ function App() {
         setMode('summary');
       }
 
-      setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: makeId() }]);
+      writer.setChat((items) => [...items, { role: 'assistant', text: data.text, mode: testArtifacts.includes(type) ? 'test' : 'summary', id: makeId() }]);
     } catch (artifactError) {
       setError(artifactError.message);
     } finally {
@@ -2098,6 +2118,10 @@ function App() {
     const trimmed = customMessage.trim();
     if (!studySet?.vectorStoreId || !trimmed) return;
 
+    // Bind writes to the source the student is asking about, so switching
+    // source mid-answer never routes the reply to the wrong deck/chat.
+    const key = activeSourceId || 'unassigned';
+    const writer = sourceWriters(key);
     stopSpeech(false);
     busyRef.current = 'study';
     setBusy('study');
@@ -2105,7 +2129,7 @@ function App() {
     setMessage('');
     const userItem = { role: 'user', text: trimmed, mode, id: makeId() };
     const history = chat.slice(-8).map(({ role, text }) => ({ role, text }));
-    setChat((items) => [...items, userItem]);
+    writer.setChat((items) => [...items, userItem]);
 
     try {
       const response = await fetch(`${API_BASE}/study`, {
@@ -2124,7 +2148,7 @@ function App() {
       if (!response.ok) throw new Error(data.error || 'Study request failed');
       bumpUsage('aiCalls');
       const assistantItem = { role: 'assistant', text: data.text, mode, id: makeId() };
-      setChat((items) => [...items, assistantItem]);
+      writer.setChat((items) => [...items, assistantItem]);
       if (conversationMode || options.speak) {
         await speak(assistantItem, { force: true });
       }
@@ -2174,6 +2198,8 @@ function App() {
   }
 
   async function transcribe(blob) {
+    const key = activeSourceId || 'unassigned';
+    const writer = sourceWriters(key);
     busyRef.current = 'voice';
     setBusy('voice');
     const body = new FormData();
@@ -2190,7 +2216,7 @@ function App() {
       }
       if (isStopPhrase(data.text)) {
         stopSpeech();
-        setChat((items) => [
+        writer.setChat((items) => [
           ...items,
           { role: 'user', text: data.text, mode, id: makeId() },
           { role: 'assistant', text: 'Paused. Ask me for the next explanation, summary, or quiz when you are ready.', mode, id: makeId() }

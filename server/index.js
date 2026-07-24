@@ -1181,7 +1181,7 @@ app.post(apiPaths('/api/source/delete'), requireAuth, requireApiKey, async (req,
       source.files = (source.files || []).filter((file) => file.fileId !== fileId);
       source.textChars = (source.files || []).reduce((sum, file) => {
         if (!file.textExtracted) return sum;
-        try { return sum + fs.statSync(sourceTextPath(req.user.id, source.id, file.fileId)).size; } catch { return sum; }
+        try { return sum + fs.readFileSync(sourceTextPath(req.user.id, source.id, file.fileId), 'utf8').length; } catch { return sum; }
       }, 0);
       if (!source.files.length) {
         try { await openaiClient.vectorStores.del(source.vectorStoreId); } catch { /* already gone */ }
