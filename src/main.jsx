@@ -1204,14 +1204,20 @@ function App() {
   // repetition reviews, and questions asked. No invented mastery percentages.
   const studyStats = useMemo(() => {
     const now = Date.now();
-    const dueCards = flashcards.filter((card) => {
+    const newCards = [];
+    const dueScheduled = [];
+    let reviewed = 0;
+    for (const card of flashcards) {
       const review = learning.reviews?.[card.id];
-      return !review?.dueAt || new Date(review.dueAt).getTime() <= now;
-    });
-    const reviewed = flashcards.filter((card) => learning.reviews?.[card.id]).length;
+      if (review) reviewed += 1;
+      if (!review?.dueAt) newCards.push(card);
+      else if (new Date(review.dueAt).getTime() <= now) dueScheduled.push(card);
+    }
+    // Scheduled cards first (they are overdue), then new cards to learn.
+    const dueCards = [...dueScheduled, ...newCards];
     const questions = chat.filter((item) => item.role === 'user').length;
     const answers = chat.filter((item) => item.role === 'assistant').length;
-    return { dueCards, reviewed, total: flashcards.length, questions, answers };
+    return { dueCards, newCount: newCards.length, dueCount: dueScheduled.length, reviewed, total: flashcards.length, questions, answers };
   }, [flashcards, learning, chat]);
   const reviewedCount = studyStats.reviewed;
   const activeCard = flashcards[Math.min(activeCardIndex, Math.max(0, flashcards.length - 1))];
@@ -2671,33 +2677,42 @@ function App() {
                   </div>
                 )}
                 <div className="stat-tiles wide">
-                  <div className="stat-tile"><strong>{studyStats.questions}</strong><span>Questions asked</span></div>
                   <div className="stat-tile"><strong>{studyStats.total}</strong><span>Flashcards made</span></div>
-                  <div className="stat-tile"><strong>{studyStats.reviewed}</strong><span>Cards reviewed</span></div>
-                  <div className="stat-tile"><strong>{studyStats.dueCards.length}</strong><span>Due to review</span></div>
+                  <div className="stat-tile"><strong>{studyStats.newCount}</strong><span>New, not studied yet</span></div>
+                  <div className="stat-tile"><strong>{studyStats.reviewed}</strong><span>Cards studied</span></div>
+                  <div className="stat-tile"><strong>{studyStats.dueCount}</strong><span>Due for another look</span></div>
                 </div>
                 <div className="kit-section">
                   <div className="section-title">
                     <BookmarkPlus size={18} />
-                    <h3>Cards to review now</h3>
+                    <h3>Cards to study now</h3>
                   </div>
+                  <p className="review-note">
+                    New cards are ready to study right away, that is why they appear here. Once you grade a card it comes back on a spaced schedule: Again shows it soon, Easy pushes it days out. {studyStats.newCount} new and {studyStats.dueCount} due for another look.
+                  </p>
                   {studyStats.dueCards.length ? (
                     <div className="review-list">
-                      {studyStats.dueCards.slice(0, 10).map((card) => (
-                        <article key={card.id}>
-                          <strong>{card.question}</strong>
-                          <span>{card.answer}</span>
-                          <div>
-                            <button type="button" onClick={() => reviewCard(card.id, 'again')}>Again</button>
-                            <button type="button" onClick={() => reviewCard(card.id, 'hard')}>Hard</button>
-                            <button type="button" onClick={() => reviewCard(card.id, 'good')}>Good</button>
-                            <button type="button" onClick={() => reviewCard(card.id, 'easy')}>Easy</button>
-                          </div>
-                        </article>
-                      ))}
+                      {studyStats.dueCards.slice(0, 12).map((card) => {
+                        const isNew = !learning.reviews?.[card.id];
+                        return (
+                          <article key={card.id}>
+                            <div className="review-head">
+                              <em className={isNew ? 'review-badge new' : 'review-badge due'}>{isNew ? 'New' : 'Due'}</em>
+                              <strong>{card.question}</strong>
+                            </div>
+                            <span>{card.answer}</span>
+                            <div className="review-grade">
+                              <button type="button" className="grade-again" onClick={() => reviewCard(card.id, 'again')}>Again</button>
+                              <button type="button" className="grade-hard" onClick={() => reviewCard(card.id, 'hard')}>Hard</button>
+                              <button type="button" className="grade-good" onClick={() => reviewCard(card.id, 'good')}>Good</button>
+                              <button type="button" className="grade-easy" onClick={() => reviewCard(card.id, 'easy')}>Easy</button>
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   ) : (
-                    <p className="muted">Nothing is due right now. {studyStats.total ? 'Nice work, come back later.' : 'Make some flashcards to start a review schedule.'}</p>
+                    <p className="muted">Nothing to study right now. {studyStats.total ? 'Nice work, come back when cards are due.' : 'Make some flashcards to start a review schedule.'}</p>
                   )}
                   {studySet && (
                     <button type="button" className="kit-inline-cta" onClick={() => createArtifact('flashcards')} disabled={!!busy}>

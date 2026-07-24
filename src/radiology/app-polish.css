@@ -563,3 +563,31 @@
   :root[data-theme="dark"] .how-to-steps { grid-template-columns: 1fr; }
   :root[data-theme="dark"] .stat-tiles.wide { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Progress review cards: dark-theme styling (was falling back to white boxes) */
+:root[data-theme="dark"] .review-note { color: var(--c-muted, #8794ab); font-size: 0.84rem; line-height: 1.55; margin: 2px 0 12px; }
+:root[data-theme="dark"] .review-list article {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--c-panel, #111722);
+  border: 1px solid var(--c-line, #232c3d);
+  border-radius: 14px;
+  padding: 16px;
+}
+:root[data-theme="dark"] .review-head { display: flex; align-items: baseline; gap: 10px; }
+:root[data-theme="dark"] .review-list strong { color: var(--c-text, #e8eef9); font-size: 0.98rem; line-height: 1.4; }
+:root[data-theme="dark"] .review-list span { color: var(--c-muted, #99a6bb); }
+:root[data-theme="dark"] .review-badge {
+  flex: 0 0 auto; font-style: normal; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; border-radius: 999px; padding: 3px 9px;
+}
+:root[data-theme="dark"] .review-badge.new { color: #7fe0ff; background: rgba(91,139,255,0.18); }
+:root[data-theme="dark"] .review-badge.due { color: #ffca7a; background: rgba(255,180,90,0.16); }
+:root[data-theme="dark"] .review-grade { display: flex; flex-wrap: wrap; gap: 8px; }
+:root[data-theme="dark"] .review-grade button {
+  border: 1px solid var(--c-line-2, #2e3950); border-radius: 10px; padding: 7px 16px;
+  background: var(--c-bg, #0a0e14); color: var(--c-text, #e8eef9); font-weight: 700; font-size: 0.82rem; cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+:root[data-theme="dark"] .review-grade .grade-again:hover { border-color: #ff6b81; color: #ff9bab; }
+:root[data-theme="dark"] .review-grade .grade-hard:hover  { border-color: #ffb45a; color: #ffca7a; }
+:root[data-theme="dark"] .review-grade .grade-good:hover  { border-color: #36d6c3; color: #6fe7da; }
+:root[data-theme="dark"] .review-grade .grade-easy:hover  { border-color: #58d68d; color: #8fe6b0; }
